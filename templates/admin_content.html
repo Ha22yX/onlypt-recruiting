@@ -1,0 +1,64 @@
+{% extends "admin_base.html" %}
+{% block title %}Content Editor | onlyPT Recruiting{% endblock %}
+
+{% block content %}
+<section
+  class="admin-editor"
+  data-admin-page="{{ editing_page_key }}"
+  data-editor-pages='{{ editor_pages|tojson }}'
+  data-background-upload-url="{{ background_upload_url }}"
+  data-background-delete-url="{{ background_delete_url }}"
+  data-background-config-url="{{ background_config_url }}"
+>
+  <aside class="admin-editor-sidebar">
+    <div class="admin-editor-head">
+      <div>
+        <p class="eyebrow">Admin workspace</p>
+        <h1 data-admin-page-title>{{ editing_page.label }}</h1>
+      </div>
+      <div class="admin-head-actions">
+        <a class="admin-logout is-current" href="{{ url_for('admin_content', page_key='home') }}"><i data-lucide="square-pen"></i> Content</a>
+        <a class="admin-logout" href="{{ url_for('admin_leads') }}"><i data-lucide="inbox"></i> Leads</a>
+        <a class="admin-logout" href="{{ url_for('admin_logout') }}"><i data-lucide="log-out"></i> Logout</a>
+      </div>
+    </div>
+
+    <nav class="admin-page-tabs" aria-label="Editable pages" data-admin-page-tabs>
+      <p class="admin-nav-label">Editable pages</p>
+      {% for page_key, page_meta in content_pages.items() %}
+        <button class="{{ 'active' if page_key == editing_page_key else '' }}" type="button" data-page-switch="{{ page_key }}">
+          <span>{{ page_meta.label }}</span>
+          <small>{{ page_meta.fields|length }} fields</small>
+        </button>
+      {% endfor %}
+    </nav>
+
+    <form id="admin-content-form" class="admin-field-form">
+      <div class="admin-field-list" data-admin-field-list></div>
+
+      <div class="admin-save-bar">
+        <button class="button primary admin-save-button" type="submit" data-save-button>
+          <i data-lucide="save" data-save-icon></i>
+          <span data-save-label>Save changes</span>
+        </button>
+        <span id="admin-save-status" role="status" aria-live="polite">Preview is live. Save when ready.</span>
+      </div>
+    </form>
+  </aside>
+
+  <div class="admin-preview-panel">
+    <div class="admin-preview-toolbar">
+      <div>
+        <span>Preview</span>
+        <strong data-admin-preview-title>{{ editing_page.label }}</strong>
+      </div>
+      <a href="{{ editor_pages[editing_page_key].previewUrl }}" target="_blank" rel="noreferrer" data-admin-preview-open><i data-lucide="external-link"></i> Open</a>
+    </div>
+    <iframe id="admin-preview-frame" src="{{ editor_pages[editing_page_key].previewUrl }}" title="{{ editing_page.label }} page preview"></iframe>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{{ url_for('static', filename='js/admin.js') }}?v=20260610-admin-unified1"></script>
+{% endblock %}

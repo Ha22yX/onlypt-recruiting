@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Draft Editor | onlyPT Recruiting{% endblock %}
+
+{% block content %}
+<section class="editor-shell">
+  <div class="editor-heading reveal">
+    <p class="eyebrow">Development Draft</p>
+    <h1>Edit {{ editing_page.label }} without changing the live site.</h1>
+    <p>Saved drafts stay on the server as a private working copy for this page.</p>
+  </div>
+
+  <form class="editor-layout reveal" method="post" action="{{ url_for('edit_page', page_key=editing_page_key) }}">
+    <div class="editor-fields">
+      <label>
+        <span>Draft headline</span>
+        <input type="text" name="draft_headline" value="{{ draft.get('draft_headline', '') }}" placeholder="Proposed page headline">
+      </label>
+
+      <label>
+        <span>Draft intro / subheadline</span>
+        <textarea name="draft_subheadline" rows="4" placeholder="Proposed supporting copy">{{ draft.get('draft_subheadline', '') }}</textarea>
+      </label>
+
+      <div class="editor-two">
+        <label>
+          <span>Primary CTA</span>
+          <input type="text" name="primary_cta" value="{{ draft.get('primary_cta', '') }}" placeholder="Button text">
+        </label>
+        <label>
+          <span>Secondary CTA</span>
+          <input type="text" name="secondary_cta" value="{{ draft.get('secondary_cta', '') }}" placeholder="Optional button text">
+        </label>
+      </div>
+
+      <label>
+        <span>Layout / design notes</span>
+        <textarea name="layout_notes" rows="6" placeholder="Notes about sections, order, imagery, motion, or spacing">{{ draft.get('layout_notes', '') }}</textarea>
+      </label>
+
+      <label>
+        <span>Draft page content</span>
+        <textarea class="editor-body" name="draft_body" rows="18" placeholder="Write the proposed content or section-by-section changes here">{{ draft.get('draft_body', '') }}</textarea>
+      </label>
+    </div>
+
+    <aside class="editor-sidebar">
+      <div class="editor-card">
+        <span>Editing</span>
+        <strong>{{ editing_page.label }}</strong>
+        <small>Template: {{ editing_page.template }}</small>
+      </div>
+
+      <div class="editor-card">
+        <span>Saved on server</span>
+        <strong>{{ draft.get('updated_at', 'Not saved yet') }}</strong>
+        <small>Storage: instance/page_edits/{{ editing_page_key }}.json</small>
+      </div>
+
+      <div class="editor-actions">
+        <button class="button primary" type="submit"><i data-lucide="save"></i> Save draft</button>
+        <a class="button secondary" href="{{ live_page_url }}"><i data-lucide="external-link"></i> View live page</a>
+      </div>
+
+      <nav class="editor-pages" aria-label="Draft editor pages">
+        {% for key, meta in editable_pages.items() %}
+          <a class="{{ 'active' if key == editing_page_key else '' }}" href="{{ url_for('edit_page', page_key=key) }}">{{ meta.label }}</a>
+        {% endfor %}
+      </nav>
+    </aside>
+  </form>
+</section>
+{% endblock %}

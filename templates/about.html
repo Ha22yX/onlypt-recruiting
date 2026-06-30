@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}About | onlyPT Recruiting{% endblock %}
+
+{% block content %}
+<section class="page-hero story">
+  <div class="story-mark" aria-hidden="true">PT</div>
+  <div class="story-copy reveal">
+    <p class="eyebrow" {{ cms_attrs('about', 'hero.eyebrow') }}>{{ cms_text('about', 'hero.eyebrow') }}</p>
+    <h1 {{ cms_attrs('about', 'hero.title') }}>{{ cms_text('about', 'hero.title') }}</h1>
+    <p {{ cms_attrs('about', 'hero.body') }}>{{ cms_text('about', 'hero.body') }}</p>
+  </div>
+  <div class="story-ledger reveal" aria-label="onlyPT specialization ledger">
+    <span {{ cms_attrs('about', 'ledger.label1') }}>{{ cms_text('about', 'ledger.label1') }}</span><strong {{ cms_attrs('about', 'ledger.value1') }}>{{ cms_text('about', 'ledger.value1') }}</strong>
+    <span {{ cms_attrs('about', 'ledger.label2') }}>{{ cms_text('about', 'ledger.label2') }}</span><strong {{ cms_attrs('about', 'ledger.value2') }}>{{ cms_text('about', 'ledger.value2') }}</strong>
+    <span {{ cms_attrs('about', 'ledger.label3') }}>{{ cms_text('about', 'ledger.label3') }}</span><strong {{ cms_attrs('about', 'ledger.value3') }}>{{ cms_text('about', 'ledger.value3') }}</strong>
+  </div>
+</section>
+
+<section class="split-section about-perspective">
+  <div class="split-copy reveal">
+    <p class="eyebrow" {{ cms_attrs('about', 'perspective.eyebrow') }}>{{ cms_text('about', 'perspective.eyebrow') }}</p>
+    <h2 {{ cms_attrs('about', 'perspective.title') }}>{{ cms_text('about', 'perspective.title') }}</h2>
+    <p {{ cms_attrs('about', 'perspective.body') }}>{{ cms_text('about', 'perspective.body') }}</p>
+  </div>
+  <div class="founder-note reveal">
+    <i data-lucide="quote"></i>
+    <p {{ cms_attrs('about', 'perspective.quote') }}>{{ cms_text('about', 'perspective.quote') }}</p>
+  </div>
+</section>
+
+<section class="band values about-values">
+  <div class="section-heading reveal">
+    <p class="eyebrow" {{ cms_attrs('about', 'values.eyebrow') }}>{{ cms_text('about', 'values.eyebrow') }}</p>
+    <h2 {{ cms_attrs('about', 'values.title') }}>{{ cms_text('about', 'values.title') }}</h2>
+  </div>
+  <div class="three-grid">
+    <article class="feature reveal">
+      <i data-lucide="target"></i>
+      <h3 {{ cms_attrs('about', 'values.card1.title') }}>{{ cms_text('about', 'values.card1.title') }}</h3>
+      <p {{ cms_attrs('about', 'values.card1.body') }}>{{ cms_text('about', 'values.card1.body') }}</p>
+    </article>
+    <article class="feature reveal">
+      <i data-lucide="ear"></i>
+      <h3 {{ cms_attrs('about', 'values.card2.title') }}>{{ cms_text('about', 'values.card2.title') }}</h3>
+      <p {{ cms_attrs('about', 'values.card2.body') }}>{{ cms_text('about', 'values.card2.body') }}</p>
+    </article>
+    <article class="feature reveal">
+      <i data-lucide="shield-check"></i>
+      <h3 {{ cms_attrs('about', 'values.card3.title') }}>{{ cms_text('about', 'values.card3.title') }}</h3>
+      <p {{ cms_attrs('about', 'values.card3.body') }}>{{ cms_text('about', 'values.card3.body') }}</p>
+    </article>
+  </div>
+</section>
+{% endblock %}

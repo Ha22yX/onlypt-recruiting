@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{ cms_text('general', 'meta.description') }}">
+    <title>{% block title %}onlyPT Recruiting{% endblock %}</title>
+    <script>
+      (function bootPageState() {
+        var root = document.documentElement;
+        var mobileLite = window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+        root.classList.add("js");
+        if (mobileLite) {
+          root.classList.add("mobile-lite", "page-ready", "page-entered");
+          return;
+        }
+        root.classList.add("page-loading");
+        window.setTimeout(function revealPageFallback() {
+          root.classList.remove("page-loading");
+          root.classList.add("page-ready", "page-entered");
+          var sections = document.querySelectorAll("main > section");
+          if (!sections.length) {
+            window.setTimeout(revealPageFallback, 100);
+          }
+        }, 700);
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260609-static-bg1">
+    {% block extra_head %}{% endblock %}
+    <script src="https://unpkg.com/lucide@latest" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260609-static-bg1" defer></script>
+  </head>
+  <body
+    class="{{ 'site-background-enabled' if site_background_enabled else '' }}"
+    {% if site_background_enabled %}style="--site-bg-image: url('{{ site_background_url }}');"{% endif %}
+  >
+    <svg class="liquid-glass-defs" aria-hidden="true" focusable="false">
+      <filter id="liquid-glass-mask-filter" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.009 0.018" numOctaves="2" seed="7" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" xChannelSelector="R" yChannelSelector="G" result="displaced" />
+        <feGaussianBlur in="displaced" stdDeviation="0.25" result="softened" />
+        <feColorMatrix
+          in="softened"
+          type="matrix"
+          values="1.02 0 0 0 0.015  0 1.01 0 0 0.012  0 0 0.98 0 0  0 0 0 1 0"
+        />
+      </filter>
+    </svg>
+    <div class="site-custom-background" aria-hidden="true">
+      <span class="site-bg-soften"></span>
+    </div>
+    <div class="scroll-progress" aria-hidden="true"></div>
+    <div class="site-atmosphere" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="ambient-geometry" aria-hidden="true">
+      <span class="geo-shape geo-diamond"></span>
+      <span class="geo-shape geo-frame"></span>
+      <span class="geo-shape geo-triangle"></span>
+      <span class="geo-shape geo-slab"></span>
+      <span class="geo-shape geo-needle"></span>
+      <span class="geo-shape geo-block"></span>
+    </div>
+    <div class="site-glass-mask" aria-hidden="true"></div>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="{{ url_for('home') }}" aria-label="onlyPT Recruiting home">
+        <span class="brand-mark">PT</span>
+        <span>
+          <strong {{ cms_attrs('general', 'brand.name') }}>{{ cms_text('general', 'brand.name') }}</strong>
+          <small {{ cms_attrs('general', 'brand.subtitle') }}>{{ cms_text('general', 'brand.subtitle') }}</small>
+        </span>
+      </a>
+      <button class="nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false">
+        <i data-lucide="menu"></i>
+      </button>
+      <nav class="site-nav" aria-label="Primary navigation">
+        {% for key, field_key, endpoint in nav_items %}
+          <a class="{{ 'active' if page == key else '' }}" href="{{ url_for(endpoint) }}"><span {{ cms_attrs('general', field_key) }}>{{ cms_text('general', field_key) }}</span></a>
+        {% endfor %}
+      </nav>
+      <a class="header-cta" href="{{ url_for('contact', audience='employer') }}"><span {{ cms_attrs('general', 'header.cta') }}>{{ cms_text('general', 'header.cta') }}</span></a>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack" role="status" aria-live="polite">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <main id="main">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <div>
+        <a class="brand footer-brand" href="{{ url_for('home') }}">
+          <span class="brand-mark">PT</span>
+          <span>
+            <strong {{ cms_attrs('general', 'brand.name') }}>{{ cms_text('general', 'brand.name') }}</strong>
+            <small {{ cms_attrs('general', 'brand.subtitle') }}>{{ cms_text('general', 'brand.subtitle') }}</small>
+          </span>
+        </a>
+        <p {{ cms_attrs('general', 'footer.description') }}>{{ cms_text('general', 'footer.description') }}</p>
+      </div>
+      <div class="footer-links">
+        <a href="{{ url_for('employers') }}"><span {{ cms_attrs('general', 'footer.employers') }}>{{ cms_text('general', 'footer.employers') }}</span></a>
+        <a href="{{ url_for('therapists') }}"><span {{ cms_attrs('general', 'footer.therapists') }}>{{ cms_text('general', 'footer.therapists') }}</span></a>
+        <a href="{{ url_for('about') }}"><span {{ cms_attrs('general', 'footer.about') }}>{{ cms_text('general', 'footer.about') }}</span></a>
+        <a href="{{ url_for('contact') }}"><span {{ cms_attrs('general', 'footer.contact') }}>{{ cms_text('general', 'footer.contact') }}</span></a>
+        <a href="{{ url_for('admin_index') }}"><span {{ cms_attrs('general', 'footer.admin') }}>{{ cms_text('general', 'footer.admin') }}</span></a>
+      </div>
+    </footer>
+    {% block extra_scripts %}{% endblock %}
+  </body>
+</html>

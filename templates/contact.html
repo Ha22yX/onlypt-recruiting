@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Contact | onlyPT Recruiting{% endblock %}
+
+{% block content %}
+<section class="contact-layout">
+  <div class="contact-copy reveal">
+    <p class="eyebrow" {{ cms_attrs('contact', 'hero.eyebrow') }}>{{ cms_text('contact', 'hero.eyebrow') }}</p>
+    <h1 {{ cms_attrs('contact', 'hero.title') }}>{{ cms_text('contact', 'hero.title') }}</h1>
+    <p {{ cms_attrs('contact', 'hero.body') }}>{{ cms_text('contact', 'hero.body') }}</p>
+    <div class="contact-methods">
+      <a href="mailto:{{ cms_text('contact', 'method.email') }}"><i data-lucide="mail"></i> <span {{ cms_attrs('contact', 'method.email') }}>{{ cms_text('contact', 'method.email') }}</span></a>
+      <span><i data-lucide="clock-3"></i> <span {{ cms_attrs('contact', 'method.response') }}>{{ cms_text('contact', 'method.response') }}</span></span>
+    </div>
+  </div>
+
+  <form class="lead-form reveal" method="post" action="{{ url_for('contact') }}">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <label>
+      <span {{ cms_attrs('contact', 'form.audience_label') }}>{{ cms_text('contact', 'form.audience_label') }}</span>
+      <select name="audience">
+        <option value="employer" {{ 'selected' if audience == 'employer' else '' }} {{ cms_attrs('contact', 'form.option_employer') }}>{{ cms_text('contact', 'form.option_employer') }}</option>
+        <option value="therapist" {{ 'selected' if audience == 'therapist' else '' }} {{ cms_attrs('contact', 'form.option_therapist') }}>{{ cms_text('contact', 'form.option_therapist') }}</option>
+      </select>
+    </label>
+    <label>
+      <span {{ cms_attrs('contact', 'form.name') }}>{{ cms_text('contact', 'form.name') }}</span>
+      <input name="name" type="text" autocomplete="name" required>
+    </label>
+    <label>
+      <span {{ cms_attrs('contact', 'form.email') }}>{{ cms_text('contact', 'form.email') }}</span>
+      <input name="email" type="email" autocomplete="email" required>
+    </label>
+    <label>
+      <span {{ cms_attrs('contact', 'form.organization') }}>{{ cms_text('contact', 'form.organization') }}</span>
+      <input name="organization" type="text" autocomplete="organization">
+    </label>
+    <label>
+      <span {{ cms_attrs('contact', 'form.phone') }}>{{ cms_text('contact', 'form.phone') }}</span>
+      <input name="phone" type="tel" autocomplete="tel">
+    </label>
+    <label>
+      <span {{ cms_attrs('contact', 'form.role') }}>{{ cms_text('contact', 'form.role') }}</span>
+      <input name="role" type="text" placeholder="{{ cms_text('contact', 'form.role_placeholder') }}" {{ cms_attrs('contact', 'form.role_placeholder') }} data-cms-attribute="placeholder">
+    </label>
+    <label>
+      <span {{ cms_attrs('contact', 'form.message') }}>{{ cms_text('contact', 'form.message') }}</span>
+      <textarea name="message" rows="5" required></textarea>
+    </label>
+    <button class="button primary form-submit" type="submit"><i data-lucide="send"></i> <span {{ cms_attrs('contact', 'form.submit') }}>{{ cms_text('contact', 'form.submit') }}</span></button>
+  </form>
+</section>
+{% endblock %}

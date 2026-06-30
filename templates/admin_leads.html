@@ -1,0 +1,102 @@
+{% extends "admin_base.html" %}
+{% block title %}Contact Leads | onlyPT Admin{% endblock %}
+
+{% block content %}
+<section class="admin-editor admin-editor-leads">
+  <aside class="admin-editor-sidebar admin-leads-sidebar">
+    <div class="admin-editor-head">
+      <div>
+        <p class="eyebrow">Admin workspace</p>
+        <h1>Leads</h1>
+      </div>
+      <div class="admin-head-actions">
+        <a class="admin-logout" href="{{ url_for('admin_content', page_key='home') }}"><i data-lucide="square-pen"></i> Content</a>
+        <a class="admin-logout is-current" href="{{ url_for('admin_leads') }}"><i data-lucide="inbox"></i> Leads</a>
+        <a class="admin-logout" href="{{ url_for('admin_logout') }}"><i data-lucide="log-out"></i> Logout</a>
+      </div>
+    </div>
+
+    <div class="admin-leads-summary">
+      <p class="admin-nav-label">Contact inbox</p>
+      <div class="admin-leads-stat">
+        <strong>{{ leads|length }}</strong>
+        <span>{{ 'submission' if leads|length == 1 else 'submissions' }}</span>
+      </div>
+      <div class="admin-leads-note">
+        <i data-lucide="mail-check"></i>
+        <p>New Contact page submissions are saved here automatically.</p>
+      </div>
+      <a class="admin-leads-helper" href="{{ url_for('contact') }}" target="_blank" rel="noreferrer">
+        <i data-lucide="external-link"></i>
+        Open contact page
+      </a>
+    </div>
+  </aside>
+
+  <div class="admin-preview-panel admin-leads-panel">
+    <div class="admin-preview-toolbar">
+      <div>
+        <span>Leads</span>
+        <strong>Contact submissions</strong>
+      </div>
+      <a href="{{ url_for('admin_content', page_key='home') }}"><i data-lucide="square-pen"></i> Edit content</a>
+    </div>
+
+    {% if leads %}
+      <div class="admin-leads-table-wrap">
+        <table class="admin-leads-table">
+          <thead>
+            <tr>
+              <th>Received</th>
+              <th>Audience</th>
+              <th>Name</th>
+              <th>Contact</th>
+              <th>Organization</th>
+              <th>Role / setting</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for lead in leads %}
+              <tr>
+                <td data-label="Received">
+                  <span class="lead-date">{{ lead.created_at or '-' }}</span>
+                </td>
+                <td data-label="Audience">
+                  <span class="lead-pill">{{ lead.audience or '-' }}</span>
+                </td>
+                <td data-label="Name">
+                  <strong>{{ lead.name or '-' }}</strong>
+                </td>
+                <td data-label="Contact">
+                  <div class="lead-contact-stack">
+                    {% if lead.email %}
+                      <a href="mailto:{{ lead.email }}">{{ lead.email }}</a>
+                    {% else %}
+                      <span>-</span>
+                    {% endif %}
+                    {% if lead.phone %}
+                      <a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>
+                    {% endif %}
+                  </div>
+                </td>
+                <td data-label="Organization">{{ lead.organization or '-' }}</td>
+                <td data-label="Role / setting">{{ lead.role or '-' }}</td>
+                <td data-label="Message">
+                  <p class="lead-message">{{ lead.message or '-' }}</p>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="admin-empty-state">
+        <i data-lucide="inbox"></i>
+        <h2>No contact submissions yet.</h2>
+        <p>New contact form entries will appear here after visitors submit the Contact page form.</p>
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

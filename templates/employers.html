@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}For Employers | onlyPT Recruiting{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+  <p class="eyebrow" {{ cms_attrs('employers', 'hero.eyebrow') }}>{{ cms_text('employers', 'hero.eyebrow') }}</p>
+  <h1 {{ cms_attrs('employers', 'hero.title') }}>{{ cms_text('employers', 'hero.title') }}</h1>
+  <p {{ cms_attrs('employers', 'hero.body') }}>{{ cms_text('employers', 'hero.body') }}</p>
+  <a class="button primary" href="{{ url_for('contact', audience='employer') }}"><i data-lucide="calendar-check"></i> <span {{ cms_attrs('employers', 'hero.cta') }}>{{ cms_text('employers', 'hero.cta') }}</span></a>
+</section>
+
+<section class="split-section employers-solve-section">
+  <div class="split-copy reveal">
+    <p class="eyebrow" {{ cms_attrs('employers', 'solve.eyebrow') }}>{{ cms_text('employers', 'solve.eyebrow') }}</p>
+    <h2 {{ cms_attrs('employers', 'solve.title') }}>{{ cms_text('employers', 'solve.title') }}</h2>
+    <p {{ cms_attrs('employers', 'solve.body') }}>{{ cms_text('employers', 'solve.body') }}</p>
+  </div>
+  <div class="service-grid reveal">
+    <article><i data-lucide="building-2"></i><h3 {{ cms_attrs('employers', 'service1.title') }}>{{ cms_text('employers', 'service1.title') }}</h3><p {{ cms_attrs('employers', 'service1.body') }}>{{ cms_text('employers', 'service1.body') }}</p></article>
+    <article><i data-lucide="badge-check"></i><h3 {{ cms_attrs('employers', 'service2.title') }}>{{ cms_text('employers', 'service2.title') }}</h3><p {{ cms_attrs('employers', 'service2.body') }}>{{ cms_text('employers', 'service2.body') }}</p></article>
+    <article><i data-lucide="network"></i><h3 {{ cms_attrs('employers', 'service3.title') }}>{{ cms_text('employers', 'service3.title') }}</h3><p {{ cms_attrs('employers', 'service3.body') }}>{{ cms_text('employers', 'service3.body') }}</p></article>
+    <article><i data-lucide="scan-search"></i><h3 {{ cms_attrs('employers', 'service4.title') }}>{{ cms_text('employers', 'service4.title') }}</h3><p {{ cms_attrs('employers', 'service4.body') }}>{{ cms_text('employers', 'service4.body') }}</p></article>
+  </div>
+</section>
+
+<section class="band settings-band practice-map-band">
+  <div class="settings-panel practice-map-panel reveal">
+    <div class="settings-copy practice-map-copy">
+      <p class="eyebrow" {{ cms_attrs('employers', 'settings.eyebrow') }}>{{ cms_text('employers', 'settings.eyebrow') }}</p>
+      <h2 {{ cms_attrs('employers', 'settings.title') }}>{{ cms_text('employers', 'settings.title') }}</h2>
+      <p {{ cms_attrs('employers', 'settings.body') }}>{{ cms_text('employers', 'settings.body') }}</p>
+      <div class="practice-map-key" aria-label="Recruiting focus points">
+        <div class="practice-map-key-track">
+          {% for chip_key in ["practice.chip1", "practice.chip2", "practice.chip3", "practice.chip4", "practice.chip5", "practice.chip6", "practice.chip7", "practice.chip8"] %}
+            <span {{ cms_attrs('employers', chip_key) }}>{{ cms_text('employers', chip_key) }}</span>
+          {% endfor %}
+          {% for chip_key in ["practice.chip1", "practice.chip2", "practice.chip3", "practice.chip4", "practice.chip5", "practice.chip6", "practice.chip7", "practice.chip8"] %}
+            <span class="practice-chip-copy" aria-hidden="true">{{ cms_text('employers', chip_key) }}</span>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    <div class="practice-map" aria-label="Practice settings onlyPT recruits across">
+      <div class="practice-map-core" aria-hidden="true">
+        <span>PT</span>
+        <strong {{ cms_attrs('employers', 'practice.core.title') }}>{{ cms_text('employers', 'practice.core.title') }}</strong>
+        <small {{ cms_attrs('employers', 'practice.core.subtitle') }}>{{ cms_text('employers', 'practice.core.subtitle') }}</small>
+      </div>
+      <div class="practice-map-spotlight" aria-live="polite">
+        <small>01</small>
+        <strong {{ cms_attrs('employers', 'practice.node1.title') }}>{{ cms_text('employers', 'practice.node1.title') }}</strong>
+        <em {{ cms_attrs('employers', 'practice.node1.detail') }}>{{ cms_text('employers', 'practice.node1.detail') }}</em>
+      </div>
+      <div class="setting-list practice-node-list">
+        {% for number, title_key, detail_key in [
+          ("01", "practice.node1.title", "practice.node1.detail"),
+          ("02", "practice.node2.title", "practice.node2.detail"),
+          ("03", "practice.node3.title", "practice.node3.detail"),
+          ("04", "practice.node4.title", "practice.node4.detail"),
+          ("05", "practice.node5.title", "practice.node5.detail"),
+          ("06", "practice.node6.title", "practice.node6.detail"),
+          ("07", "practice.node7.title", "practice.node7.detail"),
+          ("08", "practice.node8.title", "practice.node8.detail")
+        ] %}
+          <span class="{{ 'is-active' if loop.first else '' }}"><small>{{ number }}</small><strong {{ cms_attrs('employers', title_key) }}>{{ cms_text('employers', title_key) }}</strong><em {{ cms_attrs('employers', detail_key) }}>{{ cms_text('employers', detail_key) }}</em></span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-panel reveal">
+  <p class="eyebrow" {{ cms_attrs('employers', 'cta.eyebrow') }}>{{ cms_text('employers', 'cta.eyebrow') }}</p>
+  <h2 {{ cms_attrs('employers', 'cta.title') }}>{{ cms_text('employers', 'cta.title') }}</h2>
+  <p {{ cms_attrs('employers', 'cta.body') }}>{{ cms_text('employers', 'cta.body') }}</p>
+  <a class="button primary" href="{{ url_for('contact', audience='employer') }}"><i data-lucide="send"></i> <span {{ cms_attrs('employers', 'cta.button') }}>{{ cms_text('employers', 'cta.button') }}</span></a>
+</section>
+{% endblock %}

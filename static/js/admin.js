@@ -1,0 +1,764 @@
+(() => {
+  const editor = document.querySelector(".admin-editor");
+  if (!editor) {
+    return;
+  }
+
+  const pages = JSON.parse(editor.dataset.editorPages || "{}");
+  const form = document.querySelector("#admin-content-form");
+  const fieldList = document.querySelector("[data-admin-field-list]");
+  const frame = document.querySelector("#admin-preview-frame");
+  const status = document.querySelector("#admin-save-status");
+  const pageTitle = document.querySelector("[data-admin-page-title]");
+  const previewTitle = document.querySelector("[data-admin-preview-title]");
+  const previewOpen = document.querySelector("[data-admin-preview-open]");
+  const pageButtons = Array.from(document.querySelectorAll("[data-page-switch]"));
+  const saveButton = document.querySelector("[data-save-button]");
+  const saveLabel = document.querySelector("[data-save-label]");
+  const saveIcon = document.querySelector("[data-save-icon]");
+  const backgroundUploadUrl = editor.dataset.backgroundUploadUrl;
+  const backgroundDeleteUrl = editor.dataset.backgroundDeleteUrl;
+  const backgroundConfigUrl = editor.dataset.backgroundConfigUrl;
+
+  let pageKey = editor.dataset.adminPage;
+  let activeInput = null;
+  let currentInputs = [];
+  let saveFeedbackTimer = null;
+  let lastPreviewBackgroundSignature = "";
+
+  const setStatus = (message, state = "") => {
+    if (!status) {
+      return;
+    }
+    status.textContent = message;
+    status.classList.toggle("is-success", state === "success");
+    status.classList.toggle("is-error", state === "error");
+  };
+
+  const setSaveButtonState = (state, label) => {
+    if (saveFeedbackTimer) {
+      window.clearTimeout(saveFeedbackTimer);
+      saveFeedbackTimer = null;
+    }
+
+    if (!saveButton) {
+      return;
+    }
+
+    saveButton.classList.toggle("is-saving", state === "saving");
+    saveButton.classList.toggle("is-saved", state === "saved");
+    saveButton.classList.toggle("is-error", state === "error");
+    saveButton.disabled = state === "saving";
+    saveButton.setAttribute("aria-busy", String(state === "saving"));
+
+    if (saveLabel) {
+      saveLabel.textContent = label;
+    }
+
+    if (saveIcon) {
+      saveIcon.setAttribute(
+        "data-lucide",
+        state === "saved" ? "check" : state === "error" ? "circle-alert" : "save"
+      );
+      window.lucide?.createIcons();
+    }
+  };
+
+  const resetSaveButtonSoon = () => {
+    saveFeedbackTimer = window.setTimeout(() => {
+      setSaveButtonState("idle", "Save changes");
+    }, 1800);
+  };
+
+  const escapeHtml = (value) =>
+    String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+  const selectorValue = (value) => String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+
+  const parseImageList = (value) => {
+    if (!value) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item).trim()).filter(Boolean);
+      }
+    } catch {
+      return String(value)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    return [];
+  };
+
+  const firstImageName = (value) => parseImageList(value)[0] || String(value || "").trim();
+
+  const backgroundUrl = (filename) => `/uploads/backgrounds/${encodeURIComponent(filename)}`;
+  let backgroundThumbObserver = null;
+
+  const hydrateBackgroundThumb = (img) => {
+    if (!img || img.dataset.thumbLoaded === "true") {
+      return;
+    }
+
+    const src = img.dataset.src;
+    if (!src) {
+      return;
+    }
+
+    img.dataset.thumbLoaded = "true";
+    img.src = src;
+  };
+
+  const observeBackgroundThumbs = (preview) => {
+    if (!preview) {
+      return;
+    }
+
+    const images = Array.from(preview.querySelectorAll("img[data-src]"));
+    if (!images.length) {
+      return;
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      images.forEach((img, index) => {
+        window.setTimeout(() => hydrateBackgroundThumb(img), index * 90);
+      });
+      return;
+    }
+
+    if (!backgroundThumbObserver) {
+      backgroundThumbObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) {
+              return;
+            }
+            backgroundThumbObserver.unobserve(entry.target);
+            hydrateBackgroundThumb(entry.target);
+          });
+        },
+        {
+          root: null,
+          rootMargin: "180px 0px",
+          threshold: 0.01,
+        }
+      );
+    }
+
+    images.forEach((img) => backgroundThumbObserver.observe(img));
+  };
+
+  const renderBackgroundThumbs = (preview, imageName) => {
+    if (!preview) {
+      return;
+    }
+
+    if (backgroundThumbObserver) {
+      preview.querySelectorAll("img[data-src]").forEach((img) => backgroundThumbObserver.unobserve(img));
+    }
+
+    if (!imageName) {
+      preview.classList.remove("has-image");
+      preview.innerHTML = `<em>No background image uploaded</em>`;
+      return;
+    }
+
+    preview.classList.add("has-image");
+    preview.innerHTML = `
+      <span class="admin-background-thumb" data-background-thumb="${escapeHtml(imageName)}">
+        <img data-src="${escapeHtml(backgroundUrl(imageName))}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+        <button type="button" data-remove-background="${escapeHtml(imageName)}">Remove</button>
+      </span>
+    `;
+    observeBackgroundThumbs(preview);
+  };
+
+  const setBackgroundState = (imageName, enabled = pages.general?.values?.["background.enabled"] || "off") => {
+    const nextValue = firstImageName(imageName);
+    pages.general.values["background.image"] = nextValue;
+    pages.general.values["background.enabled"] = enabled;
+
+    const hiddenInput = fieldList?.querySelector('[data-editor-input][data-cms-key="background.image"]');
+    const toggleInput = fieldList?.querySelector('[data-editor-input][data-cms-key="background.enabled"]');
+    const toggleLabel = toggleInput?.closest(".admin-toggle-control")?.querySelector("strong");
+    const preview = fieldList?.querySelector("[data-image-preview-list]");
+
+    if (hiddenInput) {
+      hiddenInput.value = nextValue;
+    }
+    if (toggleInput) {
+      toggleInput.checked = enabled === "on";
+    }
+    if (toggleLabel) {
+      toggleLabel.textContent = enabled === "on" ? "Enabled" : "Disabled";
+    }
+    renderBackgroundThumbs(preview, nextValue);
+    applyBackgroundToPreview();
+  };
+
+  const removeBackgroundImage = async (button) => {
+    const imageName = button.dataset.removeBackground;
+    const row = button.closest("[data-field-card]");
+    const uploadStatus = row?.querySelector("[data-upload-status]");
+    if (!imageName || !backgroundDeleteUrl || button.disabled) {
+      return;
+    }
+
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    if (uploadStatus) uploadStatus.textContent = "Removing image...";
+    setStatus("Removing background image...", "");
+
+    try {
+      const response = await fetch(backgroundDeleteUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ filename: imageName }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Could not remove image.");
+      }
+
+      setBackgroundState(payload.backgroundImage || "", payload.backgroundEnabled || pages.general.values["background.enabled"]);
+      if (uploadStatus) uploadStatus.textContent = "Image removed and saved.";
+      setStatus("Background image removed and saved.", "success");
+    } catch (error) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      if (uploadStatus) uploadStatus.textContent = error.message || "Remove failed.";
+      setStatus(error.message || "Could not remove image.", "error");
+    }
+  };
+
+  const saveBackgroundEnabled = async (enabled) => {
+    if (!backgroundConfigUrl) {
+      return;
+    }
+
+    const image = firstImageName(pages.general?.values?.["background.image"] || "");
+    try {
+      const response = await fetch(backgroundConfigUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ enabled, image }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Could not save background setting.");
+      }
+      setBackgroundState(payload.backgroundImage || image, payload.backgroundEnabled || enabled);
+      setStatus("Background setting saved.", "success");
+    } catch (error) {
+      setStatus(error.message || "Could not save background setting.", "error");
+    }
+  };
+
+  const previewDocument = () => {
+    try {
+      return frame?.contentDocument || frame?.contentWindow?.document || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const targetSelector = (key) =>
+    `[data-cms-page="${selectorValue(pageKey)}"][data-cms-key="${selectorValue(key)}"]`;
+
+  const getPreviewTargets = (key) => {
+    const doc = previewDocument();
+    if (!doc) {
+      return [];
+    }
+    return Array.from(doc.querySelectorAll(targetSelector(key)));
+  };
+
+  const getInputValue = (input) => {
+    if (input?.type === "checkbox") {
+      return input.checked ? "on" : "off";
+    }
+    return input?.value ?? "";
+  };
+
+  const displayTarget = (target) => {
+    if (!target) {
+      return null;
+    }
+
+    if (target.tagName === "OPTION") {
+      return target.closest("select") || target;
+    }
+
+    return target;
+  };
+
+  const applyValueToTarget = (target, value) => {
+    const attributeName = target.dataset.cmsAttribute;
+    if (attributeName) {
+      target.setAttribute(attributeName, value);
+      return;
+    }
+
+    if (target.matches("input, textarea, select")) {
+      target.value = value;
+      return;
+    }
+
+    target.textContent = value;
+  };
+
+  const applyBackgroundToPreview = () => {
+    const doc = previewDocument();
+    if (!doc) {
+      return;
+    }
+
+    const enabled = pages.general?.values?.["background.enabled"] === "on";
+    const imageName = firstImageName(pages.general?.values?.["background.image"] || "");
+    const imageUrl = imageName ? backgroundUrl(imageName) : "";
+    const shouldShow = Boolean(enabled && imageUrl);
+    const signature = JSON.stringify({ enabled: shouldShow, imageUrl });
+
+    doc.body.classList.toggle("site-background-enabled", shouldShow);
+    if (shouldShow) {
+      doc.body.style.setProperty("--site-bg-image", `url("${imageUrl}")`);
+    } else {
+      doc.body.style.removeProperty("--site-bg-image");
+    }
+
+    if (typeof doc.defaultView?.onlyPTBackgroundSlideshow?.refresh === "function") {
+      doc.defaultView.onlyPTBackgroundSlideshow.refresh();
+    }
+    lastPreviewBackgroundSignature = signature;
+  };
+
+  const activatePracticePreviewCard = (fieldKey) => {
+    if (pageKey !== "employers") {
+      return false;
+    }
+
+    const match = String(fieldKey).match(/^practice\.node(\d+)\.(title|detail)$/);
+    if (!match) {
+      return false;
+    }
+
+    const doc = previewDocument();
+    const cardIndex = Number(match[1]) - 1;
+    if (!doc || Number.isNaN(cardIndex)) {
+      return false;
+    }
+
+    const previewWindow = doc.defaultView;
+    if (typeof previewWindow?.onlyPTPracticeMapActivate === "function") {
+      previewWindow.onlyPTPracticeMapActivate(cardIndex, { animate: false });
+      return true;
+    }
+
+    const nodes = Array.from(doc.querySelectorAll(".practice-node-list span"));
+    const node = nodes[cardIndex];
+    const spotlight = doc.querySelector(".practice-map-spotlight");
+    const numberElement = spotlight?.querySelector("small");
+    const titleElement = spotlight?.querySelector("strong");
+    const detailElement = spotlight?.querySelector("em");
+    const activeNumber = node?.querySelector("small");
+    const activeTitle = node?.querySelector("strong");
+    const activeDetail = node?.querySelector("em");
+
+    if (!node || !spotlight || !titleElement || !detailElement) {
+      return false;
+    }
+
+    nodes.forEach((item, index) => {
+      const isActive = index === cardIndex;
+      item.classList.toggle("is-active", isActive);
+      item.setAttribute("aria-pressed", String(isActive));
+    });
+
+    doc.querySelector(".practice-map")?.style.setProperty("--practice-active", String(cardIndex));
+    spotlight.classList.remove("is-leaving", "is-entering");
+    if (numberElement) numberElement.textContent = activeNumber?.textContent?.trim() || "";
+    titleElement.textContent = activeTitle?.textContent?.trim() || "";
+    detailElement.textContent = activeDetail?.textContent?.trim() || "";
+
+    [titleElement, detailElement].forEach((target, index) => {
+      const source = index === 0 ? activeTitle : activeDetail;
+      ["data-cms-page", "data-cms-key", "data-cms-editable", "data-cms-attribute"].forEach((attribute) => {
+        if (source?.hasAttribute(attribute)) {
+          target.setAttribute(attribute, source.getAttribute(attribute));
+        } else {
+          target.removeAttribute(attribute);
+        }
+      });
+    });
+
+    return true;
+  };
+
+  const syncField = (input) => {
+    if (!input) {
+      return;
+    }
+
+    pages[pageKey].values[input.dataset.cmsKey] = getInputValue(input);
+    getPreviewTargets(input.dataset.cmsKey).forEach((target) => {
+      applyValueToTarget(target, getInputValue(input));
+    });
+    if (pageKey === "general" && input.dataset.cmsKey.startsWith("background.")) {
+      applyBackgroundToPreview();
+    }
+  };
+
+  const syncAll = () => {
+    currentInputs.forEach(syncField);
+  };
+
+  const clearPreviewHighlights = () => {
+    const doc = previewDocument();
+    if (!doc) {
+      return;
+    }
+
+    doc.querySelectorAll(".cms-preview-highlight").forEach((element) => {
+      element.classList.remove("cms-preview-highlight");
+    });
+  };
+
+  const installPreviewHelpers = () => {
+    const doc = previewDocument();
+    if (!doc) {
+      return;
+    }
+
+    if (!doc.querySelector("#cms-preview-highlight-style")) {
+      const style = doc.createElement("style");
+      style.id = "cms-preview-highlight-style";
+      style.textContent = `
+        html.page-loading,
+        html.page-loading body {
+          opacity: 1 !important;
+        }
+
+        main > section,
+        .reveal,
+        .page-enter {
+          opacity: 1 !important;
+          transform: none !important;
+          animation: none !important;
+        }
+
+        [data-cms-editable="true"] {
+          transition: outline-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
+        }
+
+        .cms-preview-highlight {
+          outline: 3px solid rgba(184, 91, 55, 0.82) !important;
+          outline-offset: 6px !important;
+          border-radius: 8px !important;
+          background-color: rgba(255, 246, 232, 0.28) !important;
+          box-shadow:
+            0 0 0 8px rgba(184, 91, 55, 0.1),
+            0 18px 48px rgba(184, 91, 55, 0.16) !important;
+        }
+      `;
+      doc.head.appendChild(style);
+    }
+
+    doc.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", (event) => event.preventDefault(), { capture: true });
+    });
+  };
+
+  const markActiveField = (input) => {
+    document.querySelectorAll("[data-field-card]").forEach((row) => {
+      row.classList.toggle("is-active", row.dataset.fieldKey === input?.dataset.cmsKey);
+    });
+  };
+
+  const focusPreview = (input) => {
+    activeInput = input;
+    markActiveField(input);
+    clearPreviewHighlights();
+    activatePracticePreviewCard(input.dataset.cmsKey);
+    syncField(input);
+
+    const target = displayTarget(getPreviewTargets(input.dataset.cmsKey)[0]);
+    if (!target) {
+      setStatus("Saved field. No visible preview target on this page.", "");
+      return;
+    }
+
+    target.classList.add("cms-preview-highlight");
+    target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    setStatus("Editing target highlighted in the preview.", "");
+  };
+
+  const fieldTemplate = (field, value) => {
+    let control = "";
+    if (field.type === "textarea") {
+      control = `<textarea data-editor-input data-cms-key="${escapeHtml(field.key)}" rows="4">${escapeHtml(value)}</textarea>`;
+    } else if (field.type === "toggle") {
+      control = `
+        <span class="admin-toggle-control">
+          <input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="checkbox" ${value === "on" ? "checked" : ""}>
+          <span aria-hidden="true"></span>
+          <strong>${value === "on" ? "Enabled" : "Disabled"}</strong>
+        </span>
+      `;
+    } else if (field.type === "image") {
+      const imageName = firstImageName(value);
+      control = `
+        <input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="hidden" value="${escapeHtml(imageName)}">
+        <span class="admin-image-control admin-image-control-list" data-image-control>
+          <span class="admin-image-preview-list ${imageName ? "has-image" : ""}" data-image-preview-list>
+            ${
+              imageName
+                ? `
+                  <span class="admin-background-thumb" data-background-thumb="${escapeHtml(imageName)}">
+                    <img data-src="${escapeHtml(backgroundUrl(imageName))}" alt="" loading="lazy" decoding="async" fetchpriority="low">
+                    <button type="button" data-remove-background="${escapeHtml(imageName)}">Remove</button>
+                  </span>
+                `
+                : `<em>No background image uploaded</em>`
+            }
+          </span>
+          <input data-upload-input data-cms-key="${escapeHtml(field.key)}" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          <small data-upload-status>Upload one background image. New uploads replace the current background automatically.</small>
+        </span>
+      `;
+    } else {
+      control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="text" value="${escapeHtml(value)}">`;
+    }
+
+    return `
+      <label class="admin-field-row" data-field-card data-field-key="${escapeHtml(field.key)}">
+        <span class="admin-field-meta">
+          <span>${escapeHtml(field.label)}</span>
+          <small>${escapeHtml(field.key)}</small>
+        </span>
+        ${control}
+      </label>
+    `;
+  };
+
+  const renderFields = () => {
+    const page = pages[pageKey];
+    let activeGroup = "";
+    let html = "";
+
+    page.fields.forEach((field) => {
+      if (field.group !== activeGroup) {
+        if (activeGroup) {
+          html += `</div></section>`;
+        }
+        activeGroup = field.group;
+        html += `
+          <section class="admin-field-group" data-field-group="${escapeHtml(activeGroup)}">
+            <header class="admin-field-group-label">
+              <span>${escapeHtml(activeGroup)}</span>
+              <small>${page.fields.filter((item) => item.group === activeGroup).length} fields</small>
+            </header>
+            <div class="admin-field-group-body">
+        `;
+      }
+      html += fieldTemplate(field, page.values[field.key] ?? field.default ?? "");
+    });
+    if (activeGroup) {
+      html += `</div></section>`;
+    }
+
+    fieldList.innerHTML = html;
+    currentInputs = Array.from(fieldList.querySelectorAll("[data-editor-input]"));
+    activeInput = currentInputs[0] || null;
+    fieldList.querySelectorAll("[data-image-preview-list]").forEach(observeBackgroundThumbs);
+
+    currentInputs.forEach((input) => {
+      input.addEventListener("input", () => syncField(input));
+      input.addEventListener("change", () => {
+        syncField(input);
+        const toggleLabel = input.closest(".admin-toggle-control")?.querySelector("strong");
+        if (toggleLabel) {
+          toggleLabel.textContent = input.checked ? "Enabled" : "Disabled";
+        }
+        if (pageKey === "general" && input.dataset.cmsKey === "background.enabled") {
+          saveBackgroundEnabled(input.checked ? "on" : "off");
+        }
+      });
+      input.addEventListener("focus", () => focusPreview(input));
+      input.addEventListener("click", () => focusPreview(input));
+    });
+
+    fieldList.querySelectorAll("[data-upload-input]").forEach((uploadInput) => {
+      uploadInput.addEventListener("change", async () => {
+        const files = Array.from(uploadInput.files || []);
+        if (!files.length || !backgroundUploadUrl) {
+          return;
+        }
+
+        const fieldKey = uploadInput.dataset.cmsKey;
+        const hiddenInput = fieldList.querySelector(`[data-editor-input][data-cms-key="${selectorValue(fieldKey)}"]`);
+        const row = uploadInput.closest("[data-field-card]");
+        const preview = row?.querySelector("[data-image-preview-list]");
+        const uploadStatus = row?.querySelector("[data-upload-status]");
+        const formData = new FormData();
+        formData.append("background", files[0]);
+
+        if (uploadStatus) uploadStatus.textContent = "Uploading image...";
+        setStatus("Uploading background image...", "");
+
+        try {
+          const response = await fetch(backgroundUploadUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            body: formData,
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.message || "Upload failed.");
+          }
+
+          setBackgroundState(payload.backgroundImage || "", payload.backgroundEnabled || "on");
+          renderBackgroundThumbs(preview, payload.backgroundImage || "");
+          uploadInput.value = "";
+          if (uploadStatus) uploadStatus.textContent = "Image uploaded and saved.";
+          applyBackgroundToPreview();
+          setStatus("Background image uploaded and saved.", "success");
+        } catch (error) {
+          if (uploadStatus) uploadStatus.textContent = error.message || "Upload failed.";
+          setStatus(error.message || "Could not upload image.", "error");
+        }
+      });
+    });
+
+  };
+
+  fieldList?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest("[data-remove-background]");
+    if (!button || !fieldList.contains(button)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    removeBackgroundImage(button);
+  });
+
+  const updatePageChrome = () => {
+    const page = pages[pageKey];
+    editor.dataset.adminPage = pageKey;
+    if (pageTitle) pageTitle.textContent = page.label;
+    if (previewTitle) previewTitle.textContent = page.label;
+    if (previewOpen) previewOpen.href = page.previewUrl;
+
+    pageButtons.forEach((button) => {
+      button.classList.toggle("active", button.dataset.pageSwitch === pageKey);
+    });
+  };
+
+  const setPage = (nextPageKey, options = {}) => {
+    if (!pages[nextPageKey]) {
+      return;
+    }
+
+    pageKey = nextPageKey;
+    updatePageChrome();
+    renderFields();
+    setStatus("Preview is live. Save when ready.", "");
+    setSaveButtonState("idle", "Save changes");
+
+    if (frame && frame.getAttribute("src") !== pages[pageKey].previewUrl) {
+      frame.setAttribute("src", pages[pageKey].previewUrl);
+    } else {
+      installPreviewHelpers();
+      syncAll();
+      if (activeInput) {
+        focusPreview(activeInput);
+      }
+    }
+
+    fieldList?.scrollTo({ top: 0 });
+
+    if (options.pushState !== false) {
+      window.history.pushState({ pageKey }, "", pages[pageKey].editorUrl);
+    }
+  };
+
+  pageButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setPage(button.dataset.pageSwitch);
+    });
+  });
+
+  window.addEventListener("popstate", () => {
+    const matchingPageKey = Object.keys(pages).find((key) => pages[key].editorUrl === window.location.pathname);
+    if (matchingPageKey) {
+      setPage(matchingPageKey, { pushState: false });
+    }
+  });
+
+  frame?.addEventListener("load", () => {
+    installPreviewHelpers();
+    syncAll();
+    if (activeInput) {
+      window.setTimeout(() => focusPreview(activeInput), 90);
+    }
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    syncAll();
+    setStatus("Saving changes...", "");
+    setSaveButtonState("saving", "Saving...");
+
+    const values = {};
+    currentInputs.forEach((input) => {
+      values[input.dataset.cmsKey] = getInputValue(input);
+    });
+
+    try {
+      const response = await fetch(pages[pageKey].saveUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Save failed.");
+      }
+
+      pages[pageKey].values = payload.values;
+      setStatus("Saved. Your changes are live.", "success");
+      setSaveButtonState("saved", "Saved");
+      resetSaveButtonSoon();
+    } catch (error) {
+      setStatus(error.message || "Could not save changes.", "error");
+      setSaveButtonState("error", "Save failed");
+      resetSaveButtonSoon();
+    }
+  });
+
+  setPage(pageKey, { pushState: false });
+
+  window.setTimeout(() => {
+    installPreviewHelpers();
+    syncAll();
+  }, 400);
+})();

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}onlyPT Recruiting | Physical Therapy Recruiting{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-copy reveal">
+    <h1 {{ cms_attrs('home', 'hero.title') }}>{{ cms_text('home', 'hero.title') }}</h1>
+    <p class="hero-lede" {{ cms_attrs('home', 'hero.lede') }}>{{ cms_text('home', 'hero.lede') }}</p>
+    <div class="signal-console" aria-label="onlyPT search signals">
+      <div><span {{ cms_attrs('home', 'hero.signal1.label') }}>{{ cms_text('home', 'hero.signal1.label') }}</span><strong {{ cms_attrs('home', 'hero.signal1.value') }}>{{ cms_text('home', 'hero.signal1.value') }}</strong></div>
+      <div><span {{ cms_attrs('home', 'hero.signal2.label') }}>{{ cms_text('home', 'hero.signal2.label') }}</span><strong {{ cms_attrs('home', 'hero.signal2.value') }}>{{ cms_text('home', 'hero.signal2.value') }}</strong></div>
+      <div><span {{ cms_attrs('home', 'hero.signal3.label') }}>{{ cms_text('home', 'hero.signal3.label') }}</span><strong {{ cms_attrs('home', 'hero.signal3.value') }}>{{ cms_text('home', 'hero.signal3.value') }}</strong></div>
+    </div>
+    <div class="hero-actions">
+      <a class="button primary" href="{{ url_for('contact', audience='employer') }}"><i data-lucide="briefcase-business"></i> <span {{ cms_attrs('home', 'hero.primary_cta') }}>{{ cms_text('home', 'hero.primary_cta') }}</span></a>
+      <a class="button secondary" href="{{ url_for('therapists') }}"><i data-lucide="stethoscope"></i> <span {{ cms_attrs('home', 'hero.secondary_cta') }}>{{ cms_text('home', 'hero.secondary_cta') }}</span></a>
+    </div>
+  </div>
+  <div class="hero-visual reveal">
+    <div class="search-dial" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <img src="{{ url_for('static', filename='img/pt-recruiting-hero.png') }}" alt="Physical therapist and healthcare hiring manager in a modern clinic conversation">
+    <div class="hero-stat">
+      <strong {{ cms_attrs('home', 'hero.stat.number') }}>{{ cms_text('home', 'hero.stat.number') }}</strong>
+      <span {{ cms_attrs('home', 'hero.stat.caption') }}>{{ cms_text('home', 'hero.stat.caption') }}</span>
+    </div>
+  </div>
+</section>
+
+<section class="problem band">
+  <div class="section-heading reveal">
+    <h2 {{ cms_attrs('home', 'problem.title') }}>{{ cms_text('home', 'problem.title') }}</h2>
+  </div>
+  <div class="three-grid">
+    <article class="feature reveal">
+      <i data-lucide="map-pin"></i>
+      <h3 {{ cms_attrs('home', 'problem.card1.title') }}>{{ cms_text('home', 'problem.card1.title') }}</h3>
+      <p {{ cms_attrs('home', 'problem.card1.body') }}>{{ cms_text('home', 'problem.card1.body') }}</p>
+    </article>
+    <article class="feature reveal">
+      <i data-lucide="activity"></i>
+      <h3 {{ cms_attrs('home', 'problem.card2.title') }}>{{ cms_text('home', 'problem.card2.title') }}</h3>
+      <p {{ cms_attrs('home', 'problem.card2.body') }}>{{ cms_text('home', 'problem.card2.body') }}</p>
+    </article>
+    <article class="feature reveal">
+      <i data-lucide="message-square-heart"></i>
+      <h3 {{ cms_attrs('home', 'problem.card3.title') }}>{{ cms_text('home', 'problem.card3.title') }}</h3>
+      <p {{ cms_attrs('home', 'problem.card3.body') }}>{{ cms_text('home', 'problem.card3.body') }}</p>
+    </article>
+  </div>
+</section>
+
+<section class="split-section">
+  <div class="split-copy reveal">
+    <p class="eyebrow" {{ cms_attrs('home', 'why.eyebrow') }}>{{ cms_text('home', 'why.eyebrow') }}</p>
+    <h2 {{ cms_attrs('home', 'why.title') }}>{{ cms_text('home', 'why.title') }}</h2>
+    <p {{ cms_attrs('home', 'why.body') }}>{{ cms_text('home', 'why.body') }}</p>
+  </div>
+  <div class="proof-list reveal">
+    <div><span>01</span><p {{ cms_attrs('home', 'why.proof1') }}>{{ cms_text('home', 'why.proof1') }}</p></div>
+    <div><span>02</span><p {{ cms_attrs('home', 'why.proof2') }}>{{ cms_text('home', 'why.proof2') }}</p></div>
+    <div><span>03</span><p {{ cms_attrs('home', 'why.proof3') }}>{{ cms_text('home', 'why.proof3') }}</p></div>
+  </div>
+</section>
+
+<section class="process band">
+  <div class="section-heading reveal">
+    <p class="eyebrow" {{ cms_attrs('home', 'process.eyebrow') }}>{{ cms_text('home', 'process.eyebrow') }}</p>
+    <h2 {{ cms_attrs('home', 'process.title') }}>{{ cms_text('home', 'process.title') }}</h2>
+  </div>
+  <div class="timeline">
+    {% for step, title_key, body_key in [
+      ("01", "process.step1.title", "process.step1.body"),
+      ("02", "process.step2.title", "process.step2.body"),
+      ("03", "process.step3.title", "process.step3.body"),
+      ("04", "process.step4.title", "process.step4.body"),
+      ("05", "process.step5.title", "process.step5.body")
+    ] %}
+      <article class="timeline-item reveal">
+        <span>{{ step }}</span>
+        <h3 {{ cms_attrs('home', title_key) }}>{{ cms_text('home', title_key) }}</h3>
+        <p {{ cms_attrs('home', body_key) }}>{{ cms_text('home', body_key) }}</p>
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="audience-strip">
+  <a class="audience-panel employer-panel reveal" href="{{ url_for('employers') }}">
+    <span {{ cms_attrs('home', 'audience.employer.label') }}>{{ cms_text('home', 'audience.employer.label') }}</span>
+    <h2 {{ cms_attrs('home', 'audience.employer.title') }}>{{ cms_text('home', 'audience.employer.title') }}</h2>
+    <p {{ cms_attrs('home', 'audience.employer.body') }}>{{ cms_text('home', 'audience.employer.body') }}</p>
+    <i data-lucide="arrow-right"></i>
+  </a>
+  <a class="audience-panel therapist-panel reveal" href="{{ url_for('therapists') }}">
+    <span {{ cms_attrs('home', 'audience.therapist.label') }}>{{ cms_text('home', 'audience.therapist.label') }}</span>
+    <h2 {{ cms_attrs('home', 'audience.therapist.title') }}>{{ cms_text('home', 'audience.therapist.title') }}</h2>
+    <p {{ cms_attrs('home', 'audience.therapist.body') }}>{{ cms_text('home', 'audience.therapist.body') }}</p>
+    <i data-lucide="arrow-right"></i>
+  </a>
+</section>
+{% endblock %}

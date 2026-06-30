@@ -1,0 +1,25 @@
+{% extends "admin_base.html" %}
+{% block title %}Admin Login | onlyPT Recruiting{% endblock %}
+
+{% block content %}
+<section class="admin-login-section">
+  <div class="admin-login-card">
+    <p class="eyebrow">Content editor</p>
+    <h1>Sign in to edit site copy.</h1>
+    <p>Use the private editor to adjust page text, preview the page live, and save copy changes on the server.</p>
+
+    <form class="admin-login-form" method="post" action="{{ request.full_path }}">
+      <label>
+        Username
+        <input name="username" type="text" autocomplete="username" required autofocus>
+      </label>
+      <label>
+        Password
+        <input name="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="button primary" type="submit"><i data-lucide="lock-keyhole"></i> Sign in</button>
+    </form>
+    <a class="admin-home-link" href="{{ url_for('home') }}"><i data-lucide="arrow-left"></i> Back to homepage</a>
+  </div>
+</section>
+{% endblock %}
