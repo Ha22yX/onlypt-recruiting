@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import html
 import json
 import os
@@ -24,6 +25,7 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-onlypt-secret")
 
 LEADS_FILE = Path(app.instance_path) / "leads.csv"
+LEAD_THREADS_FILE = Path(app.instance_path) / "lead_threads.json"
 NOTIFICATIONS_LOG_FILE = Path(app.instance_path) / "notification_errors.log"
 PAGE_EDITS_DIR = Path(app.instance_path) / "page_edits"
 CONTENT_FILE = Path(app.instance_path) / "content_overrides.json"
@@ -319,6 +321,56 @@ def write_lead(form_data: dict[str, str]) -> None:
         writer.writerow(row)
 
 
+def lead_id_for(row: dict[str, str]) -> str:
+    signature = "|".join(
+        str(row.get(key, "")).strip()
+        for key in ("created_at", "email", "name", "organization", "phone", "role", "message")
+    )
+    return hashlib.sha1(signature.encode("utf-8")).hexdigest()[:16]
+
+
+def default_lead_thread() -> dict[str, object]:
+    return {
+        "status": "new",
+        "next_step": "",
+        "notes": [],
+        "updated_at": "",
+    }
+
+
+def load_lead_threads() -> dict[str, dict[str, object]]:
+    if not LEAD_THREADS_FILE.exists():
+        return {}
+
+    try:
+        with LEAD_THREADS_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    normalized = {}
+    for lead_id, thread in data.items():
+        if not isinstance(thread, dict):
+            continue
+        notes = thread.get("notes", [])
+        normalized[str(lead_id)] = {
+            "status": str(thread.get("status", "new") or "new"),
+            "next_step": str(thread.get("next_step", "") or ""),
+            "updated_at": str(thread.get("updated_at", "") or ""),
+            "notes": notes if isinstance(notes, list) else [],
+        }
+    return normalized
+
+
+def save_lead_threads(threads: dict[str, dict[str, object]]) -> None:
+    LEAD_THREADS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with LEAD_THREADS_FILE.open("w", encoding="utf-8") as file:
+        json.dump(threads, file, ensure_ascii=False, indent=2)
+
+
 def read_leads() -> list[dict[str, str]]:
     if not LEADS_FILE.exists():
         return []
@@ -329,8 +381,58 @@ def read_leads() -> list[dict[str, str]]:
     except OSError:
         return []
 
+    threads = load_lead_threads()
+    for row in rows:
+        lead_id = lead_id_for(row)
+        thread = {
+            **default_lead_thread(),
+            **threads.get(lead_id, {}),
+        }
+        row["lead_id"] = lead_id
+        row["thread_status"] = str(thread.get("status", "new"))
+        row["thread_next_step"] = str(thread.get("next_step", ""))
+        row["thread_updated_at"] = str(thread.get("updated_at", ""))
+        row["thread_notes"] = thread.get("notes", [])
+        row["thread_note_count"] = str(len(row["thread_notes"]) if isinstance(row["thread_notes"], list) else 0)
+
     rows.reverse()
     return rows
+
+
+def update_lead_thread(lead_id: str, status: str, next_step: str, note: str) -> dict[str, object]:
+    valid_ids = {lead["lead_id"] for lead in read_leads()}
+    if lead_id not in valid_ids:
+        abort(404)
+
+    threads = load_lead_threads()
+    thread = {
+        **default_lead_thread(),
+        **threads.get(lead_id, {}),
+    }
+    now = datetime.now(timezone.utc).isoformat()
+    clean_status = status.strip() or "new"
+    if clean_status not in {"new", "contacted", "in_conversation", "follow_up", "closed"}:
+        clean_status = "new"
+
+    thread["status"] = clean_status
+    thread["next_step"] = next_step.strip()
+    thread["updated_at"] = now
+    clean_note = note.strip()
+    if clean_note:
+        notes = thread.get("notes", [])
+        if not isinstance(notes, list):
+            notes = []
+        notes.append(
+            {
+                "created_at": now,
+                "body": clean_note,
+            }
+        )
+        thread["notes"] = notes
+
+    threads[lead_id] = thread
+    save_lead_threads(threads)
+    return thread
 
 
 def twilio_whatsapp_address(value: str) -> str:
@@ -958,6 +1060,19 @@ def admin_content_index():
 def admin_leads():
     leads = read_leads()
     return render_template("admin_leads.html", page="admin-leads", leads=leads)
+
+
+@app.post("/admin/api/leads/<lead_id>/conversation")
+@admin_required
+def admin_update_lead_conversation(lead_id: str):
+    payload = request.get_json(silent=True) or {}
+    thread = update_lead_thread(
+        lead_id=lead_id,
+        status=str(payload.get("status", "")),
+        next_step=str(payload.get("next_step", "")),
+        note=str(payload.get("note", "")),
+    )
+    return jsonify({"ok": True, "leadId": lead_id, "thread": thread})
 
 
 @app.get("/admin/content/<page_key>")

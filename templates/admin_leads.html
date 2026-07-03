@@ -2,7 +2,7 @@
 {% block title %}Contact Leads | onlyPT Admin{% endblock %}
 
 {% block content %}
-<section class="admin-editor admin-editor-leads">
+<section class="admin-editor admin-editor-leads" data-leads='{{ leads|tojson }}'>
   <aside class="admin-editor-sidebar admin-leads-sidebar">
     <div class="admin-editor-head">
       <div>
@@ -22,9 +22,13 @@
         <strong>{{ leads|length }}</strong>
         <span>{{ 'submission' if leads|length == 1 else 'submissions' }}</span>
       </div>
+      <label class="admin-leads-search">
+        <span>Search leads</span>
+        <input type="search" placeholder="Name, email, organization, message..." data-lead-search>
+      </label>
       <div class="admin-leads-note">
         <i data-lucide="mail-check"></i>
-        <p>New Contact page submissions are saved here automatically.</p>
+        <p>Open a submission to track status, notes, and follow-up steps.</p>
       </div>
       <a class="admin-leads-helper" href="{{ url_for('contact') }}" target="_blank" rel="noreferrer">
         <i data-lucide="external-link"></i>
@@ -39,56 +43,77 @@
         <span>Leads</span>
         <strong>Contact submissions</strong>
       </div>
-      <a href="{{ url_for('admin_content', page_key='home') }}"><i data-lucide="square-pen"></i> Edit content</a>
+      <a href="{{ url_for('admin_content', page_key='email') }}"><i data-lucide="mail"></i> Email settings</a>
     </div>
 
     {% if leads %}
-      <div class="admin-leads-table-wrap">
-        <table class="admin-leads-table">
-          <thead>
-            <tr>
-              <th>Received</th>
-              <th>Audience</th>
-              <th>Name</th>
-              <th>Contact</th>
-              <th>Organization</th>
-              <th>Role / setting</th>
-              <th>Message</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for lead in leads %}
+      <div class="admin-leads-workspace">
+        <div class="admin-leads-table-wrap">
+          <table class="admin-leads-table">
+            <thead>
               <tr>
-                <td data-label="Received">
-                  <span class="lead-date">{{ lead.created_at or '-' }}</span>
-                </td>
-                <td data-label="Audience">
-                  <span class="lead-pill">{{ lead.audience or '-' }}</span>
-                </td>
-                <td data-label="Name">
-                  <strong>{{ lead.name or '-' }}</strong>
-                </td>
-                <td data-label="Contact">
-                  <div class="lead-contact-stack">
-                    {% if lead.email %}
-                      <a href="mailto:{{ lead.email }}">{{ lead.email }}</a>
-                    {% else %}
-                      <span>-</span>
-                    {% endif %}
-                    {% if lead.phone %}
-                      <a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>
-                    {% endif %}
-                  </div>
-                </td>
-                <td data-label="Organization">{{ lead.organization or '-' }}</td>
-                <td data-label="Role / setting">{{ lead.role or '-' }}</td>
-                <td data-label="Message">
-                  <p class="lead-message">{{ lead.message or '-' }}</p>
-                </td>
+                <th>Received</th>
+                <th>Status</th>
+                <th>Name</th>
+                <th>Contact</th>
+                <th>Organization</th>
+                <th>Role / setting</th>
+                <th>Message</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody data-leads-table-body>
+              {% for lead in leads %}
+                <tr
+                  data-lead-row="{{ lead.lead_id }}"
+                  data-search-text="{{ [lead.created_at, lead.audience, lead.name, lead.email, lead.phone, lead.organization, lead.role, lead.message, lead.thread_status, lead.thread_next_step]|join(' ')|lower }}"
+                >
+                  <td data-label="Received">
+                    <button class="lead-open-button" type="button" data-lead-open="{{ lead.lead_id }}">
+                      <span class="lead-date">{{ lead.created_at or '-' }}</span>
+                    </button>
+                  </td>
+                  <td data-label="Status">
+                    <span class="lead-pill lead-status-pill" data-status="{{ lead.thread_status }}">{{ lead.thread_status|replace('_', ' ') }}</span>
+                  </td>
+                  <td data-label="Name">
+                    <strong>{{ lead.name or '-' }}</strong>
+                    {% if lead.thread_note_count != '0' %}<small class="lead-note-count">{{ lead.thread_note_count }} notes</small>{% endif %}
+                  </td>
+                  <td data-label="Contact">
+                    <div class="lead-contact-stack">
+                      {% if lead.email %}
+                        <a href="mailto:{{ lead.email }}">{{ lead.email }}</a>
+                      {% else %}
+                        <span>-</span>
+                      {% endif %}
+                      {% if lead.phone %}
+                        <a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td data-label="Organization">{{ lead.organization or '-' }}</td>
+                  <td data-label="Role / setting">{{ lead.role or '-' }}</td>
+                  <td data-label="Message">
+                    <p class="lead-message">{{ lead.message or '-' }}</p>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="admin-leads-no-results" hidden data-leads-no-results>
+            <i data-lucide="search-x"></i>
+            <strong>No matching leads</strong>
+            <span>Try a different name, email, organization, role, or message keyword.</span>
+          </div>
+        </div>
+
+        <aside class="lead-detail-panel" data-lead-detail>
+          <div class="lead-detail-empty">
+            <i data-lucide="messages-square"></i>
+            <strong>Select a contact submission</strong>
+            <span>Click any lead to review the message, reply by email, and track the conversation.</span>
+          </div>
+        </aside>
       </div>
     {% else %}
       <div class="admin-empty-state">
@@ -99,4 +124,8 @@
     {% endif %}
   </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{{ url_for('static', filename='js/leads.js') }}?v=20260704-lead-tracking1"></script>
 {% endblock %}
