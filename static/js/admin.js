@@ -19,6 +19,8 @@
   const backgroundUploadUrl = editor.dataset.backgroundUploadUrl;
   const backgroundDeleteUrl = editor.dataset.backgroundDeleteUrl;
   const backgroundConfigUrl = editor.dataset.backgroundConfigUrl;
+  const faviconUploadUrl = editor.dataset.faviconUploadUrl;
+  const faviconDeleteUrl = editor.dataset.faviconDeleteUrl;
 
   let pageKey = editor.dataset.adminPage;
   let activeInput = null;
@@ -102,6 +104,7 @@
   const firstImageName = (value) => parseImageList(value)[0] || String(value || "").trim();
 
   const backgroundUrl = (filename) => `/uploads/backgrounds/${encodeURIComponent(filename)}`;
+  const faviconUrl = (filename) => `/uploads/favicons/${encodeURIComponent(filename)}`;
   let backgroundThumbObserver = null;
 
   const hydrateBackgroundThumb = (img) => {
@@ -269,6 +272,99 @@
     }
   };
 
+  const renderFaviconThumb = (preview, imageName) => {
+    if (!preview) {
+      return;
+    }
+
+    if (!imageName) {
+      preview.classList.remove("has-image");
+      preview.innerHTML = `<em>No page tab icon uploaded</em>`;
+      return;
+    }
+
+    preview.classList.add("has-image");
+    preview.innerHTML = `
+      <span class="admin-background-thumb" data-favicon-thumb="${escapeHtml(imageName)}">
+        <img src="${escapeHtml(faviconUrl(imageName))}" alt="" loading="lazy" decoding="async">
+        <button type="button" data-remove-favicon="${escapeHtml(imageName)}">Remove</button>
+      </span>
+    `;
+  };
+
+  const applyFaviconToPreview = () => {
+    const doc = previewDocument();
+    if (!doc) {
+      return;
+    }
+
+    const imageName = firstImageName(pages.general?.values?.["site.favicon"] || "");
+    let link = doc.querySelector('link[rel~="icon"]');
+    if (!imageName) {
+      link?.remove();
+      return;
+    }
+
+    if (!link) {
+      link = doc.createElement("link");
+      link.rel = "icon";
+      doc.head.appendChild(link);
+    }
+    link.href = faviconUrl(imageName);
+  };
+
+  const setFaviconState = (imageName) => {
+    const nextValue = firstImageName(imageName);
+    pages.general.values["site.favicon"] = nextValue;
+
+    const hiddenInput = fieldList?.querySelector('[data-editor-input][data-cms-key="site.favicon"]');
+    const preview = fieldList?.querySelector('[data-favicon-preview-list]');
+
+    if (hiddenInput) {
+      hiddenInput.value = nextValue;
+    }
+    renderFaviconThumb(preview, nextValue);
+    applyFaviconToPreview();
+  };
+
+  const removeFavicon = async (button) => {
+    const imageName = button.dataset.removeFavicon;
+    const row = button.closest("[data-field-card]");
+    const uploadStatus = row?.querySelector("[data-upload-status]");
+    if (!imageName || !faviconDeleteUrl || button.disabled) {
+      return;
+    }
+
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    if (uploadStatus) uploadStatus.textContent = "Removing icon...";
+    setStatus("Removing page tab icon...", "");
+
+    try {
+      const response = await fetch(faviconDeleteUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ filename: imageName }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Could not remove icon.");
+      }
+
+      setFaviconState(payload.favicon || "");
+      if (uploadStatus) uploadStatus.textContent = "Icon removed and saved.";
+      setStatus("Page tab icon removed and saved.", "success");
+    } catch (error) {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      if (uploadStatus) uploadStatus.textContent = error.message || "Remove failed.";
+      setStatus(error.message || "Could not remove icon.", "error");
+    }
+  };
+
   const previewDocument = () => {
     try {
       return frame?.contentDocument || frame?.contentWindow?.document || null;
@@ -421,6 +517,9 @@
     if (pageKey === "general" && input.dataset.cmsKey.startsWith("background.")) {
       applyBackgroundToPreview();
     }
+    if (pageKey === "general" && input.dataset.cmsKey === "site.favicon") {
+      applyFaviconToPreview();
+    }
   };
 
   const syncAll = () => {
@@ -540,6 +639,27 @@
           <small data-upload-status>Upload one background image. New uploads replace the current background automatically.</small>
         </span>
       `;
+    } else if (field.type === "favicon") {
+      const imageName = firstImageName(value);
+      control = `
+        <input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="hidden" value="${escapeHtml(imageName)}">
+        <span class="admin-image-control admin-image-control-list" data-favicon-control>
+          <span class="admin-image-preview-list ${imageName ? "has-image" : ""}" data-favicon-preview-list>
+            ${
+              imageName
+                ? `
+                  <span class="admin-background-thumb" data-favicon-thumb="${escapeHtml(imageName)}">
+                    <img src="${escapeHtml(faviconUrl(imageName))}" alt="" loading="lazy" decoding="async">
+                    <button type="button" data-remove-favicon="${escapeHtml(imageName)}">Remove</button>
+                  </span>
+                `
+                : `<em>No page tab icon uploaded</em>`
+            }
+          </span>
+          <input data-favicon-upload-input data-cms-key="${escapeHtml(field.key)}" type="file" accept="image/x-icon,image/vnd.microsoft.icon,image/png,image/svg+xml,image/webp">
+          <small data-upload-status>Upload an ICO, PNG, SVG, or WebP icon for the browser tab.</small>
+        </span>
+      `;
     } else {
       control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="text" value="${escapeHtml(value)}">`;
     }
@@ -644,6 +764,43 @@
       });
     });
 
+    fieldList.querySelectorAll("[data-favicon-upload-input]").forEach((uploadInput) => {
+      uploadInput.addEventListener("change", async () => {
+        const files = Array.from(uploadInput.files || []);
+        if (!files.length || !faviconUploadUrl) {
+          return;
+        }
+
+        const row = uploadInput.closest("[data-field-card]");
+        const uploadStatus = row?.querySelector("[data-upload-status]");
+        const formData = new FormData();
+        formData.append("favicon", files[0]);
+
+        if (uploadStatus) uploadStatus.textContent = "Uploading icon...";
+        setStatus("Uploading page tab icon...", "");
+
+        try {
+          const response = await fetch(faviconUploadUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            body: formData,
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.message || "Upload failed.");
+          }
+
+          setFaviconState(payload.favicon || "");
+          uploadInput.value = "";
+          if (uploadStatus) uploadStatus.textContent = "Icon uploaded and saved.";
+          setStatus("Page tab icon uploaded and saved.", "success");
+        } catch (error) {
+          if (uploadStatus) uploadStatus.textContent = error.message || "Upload failed.";
+          setStatus(error.message || "Could not upload icon.", "error");
+        }
+      });
+    });
+
   };
 
   fieldList?.addEventListener("click", (event) => {
@@ -656,6 +813,18 @@
     event.preventDefault();
     event.stopPropagation();
     removeBackgroundImage(button);
+  });
+
+  fieldList?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest("[data-remove-favicon]");
+    if (!button || !fieldList.contains(button)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    removeFavicon(button);
   });
 
   const updatePageChrome = () => {

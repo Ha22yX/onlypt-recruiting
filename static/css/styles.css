@@ -129,16 +129,20 @@ img {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   font-weight: 700;
   line-height: 1;
 }
 
+.site-header .brand strong {
+  font-size: clamp(1.42rem, 1.1rem + 1vw, 2.05rem);
+  letter-spacing: 0;
+}
+
 .brand small {
   display: block;
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--ink-soft);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 500;
 }
 

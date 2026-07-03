@@ -25,9 +25,11 @@ PAGE_EDITS_DIR = Path(app.instance_path) / "page_edits"
 CONTENT_FILE = Path(app.instance_path) / "content_overrides.json"
 UPLOAD_DIR = Path(app.instance_path) / "uploads"
 BACKGROUND_UPLOAD_DIR = UPLOAD_DIR / "backgrounds"
+FAVICON_UPLOAD_DIR = UPLOAD_DIR / "favicons"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
 ALLOWED_BACKGROUND_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+ALLOWED_FAVICON_EXTENSIONS = {"ico", "png", "svg", "webp"}
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
 TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "").strip()
@@ -81,6 +83,7 @@ CONTENT_PAGES = {
             cms_field("footer.about", "Footer link: About", "About", group="Footer"),
             cms_field("footer.contact", "Footer link: Contact", "Contact", group="Footer"),
             cms_field("footer.admin", "Footer link: Admin", "Admin", group="Footer"),
+            cms_field("site.favicon", "Page tab icon", "", "favicon", "Page Tab"),
             cms_field("background.enabled", "Use uploaded site background", "off", "toggle", "Background"),
             cms_field("background.image", "Site background photo", "", "image", "Background"),
         ],
@@ -489,6 +492,41 @@ def background_image_url() -> str:
     return urls[0] if urls else ""
 
 
+def favicon_name() -> str:
+    image_name = content_value("general", "site.favicon", "").strip()
+    safe_name = secure_filename(Path(image_name).name)
+    if safe_name and (FAVICON_UPLOAD_DIR / safe_name).exists():
+        return safe_name
+    return ""
+
+
+def favicon_url() -> str:
+    image_name = favicon_name()
+    return url_for("uploaded_favicon", filename=image_name) if image_name else ""
+
+
+def save_favicon_config(image_name: str | None) -> dict[str, str]:
+    all_content = load_content_overrides()
+    general_values = {
+        **content_field_defaults("general"),
+        **all_content.get("general", {}),
+    }
+    safe_name = secure_filename(Path(str(image_name or "")).name)
+    if safe_name and not (FAVICON_UPLOAD_DIR / safe_name).exists():
+        safe_name = ""
+
+    general_values["site.favicon"] = safe_name
+    all_content["general"] = {
+        key: str(general_values.get(key, "")).strip()
+        for key in content_field_defaults("general")
+    }
+    CONTENT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with CONTENT_FILE.open("w", encoding="utf-8") as file:
+        json.dump(all_content, file, ensure_ascii=False, indent=2)
+
+    return all_content["general"]
+
+
 def save_background_config(image_name: str | None, enabled: str | None = None) -> dict[str, str]:
     all_content = load_content_overrides()
     general_values = {
@@ -518,6 +556,11 @@ def save_background_config(image_name: str | None, enabled: str | None = None) -
 def allowed_background_file(filename: str) -> bool:
     extension = Path(filename).suffix.lower().lstrip(".")
     return extension in ALLOWED_BACKGROUND_EXTENSIONS
+
+
+def allowed_favicon_file(filename: str) -> bool:
+    extension = Path(filename).suffix.lower().lstrip(".")
+    return extension in ALLOWED_FAVICON_EXTENSIONS
 
 
 def cms_text(page_key: str, field_key: str, fallback: str | None = None) -> str:
@@ -605,6 +648,7 @@ def inject_site_context():
         "site_background_enabled": background_is_enabled() and bool(site_background_urls),
         "site_background_url": site_background_urls[0] if site_background_urls else "",
         "site_background_urls": site_background_urls,
+        "site_favicon_url": favicon_url(),
     }
 
 
@@ -660,6 +704,14 @@ def uploaded_background(filename: str):
     if safe_name != filename:
         abort(404)
     return send_from_directory(BACKGROUND_UPLOAD_DIR, safe_name)
+
+
+@app.get("/uploads/favicons/<path:filename>")
+def uploaded_favicon(filename: str):
+    safe_name = secure_filename(Path(filename).name)
+    if safe_name != filename:
+        abort(404)
+    return send_from_directory(FAVICON_UPLOAD_DIR, safe_name)
 
 
 @app.get("/admin")
@@ -737,6 +789,8 @@ def admin_content(page_key: str):
         background_upload_url=url_for("admin_upload_background_image"),
         background_delete_url=url_for("admin_delete_background_image"),
         background_config_url=url_for("admin_save_background_config"),
+        favicon_upload_url=url_for("admin_upload_favicon"),
+        favicon_delete_url=url_for("admin_delete_favicon"),
     )
 
 
@@ -840,6 +894,59 @@ def admin_save_background_config():
             "backgroundImage": saved_general.get("background.image", ""),
             "backgroundImages": [saved_general.get("background.image", "")] if saved_general.get("background.image") else [],
             "backgroundEnabled": saved_general.get("background.enabled", "off"),
+        }
+    )
+
+
+@app.post("/admin/api/favicon")
+@admin_required
+def admin_upload_favicon():
+    upload = (request.files.getlist("favicon") or [None])[0]
+    if upload is None or not upload.filename:
+        return jsonify({"ok": False, "message": "Choose an icon to upload."}), 400
+
+    FAVICON_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    original_name = secure_filename(upload.filename)
+    if not original_name or not allowed_favicon_file(original_name):
+        return jsonify({"ok": False, "message": "Use ICO, PNG, SVG, or WebP icons."}), 400
+
+    previous_name = favicon_name()
+    extension = Path(original_name).suffix.lower()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    filename = f"site-favicon-{stamp}{extension}"
+    upload.save(FAVICON_UPLOAD_DIR / filename)
+
+    saved_general = save_favicon_config(filename)
+    if previous_name and previous_name != filename:
+        (FAVICON_UPLOAD_DIR / previous_name).unlink(missing_ok=True)
+
+    return jsonify(
+        {
+            "ok": True,
+            "filename": filename,
+            "url": url_for("uploaded_favicon", filename=filename),
+            "favicon": saved_general.get("site.favicon", ""),
+        }
+    )
+
+
+@app.post("/admin/api/favicon/delete")
+@admin_required
+def admin_delete_favicon():
+    payload = request.get_json(silent=True) or {}
+    filename = secure_filename(Path(str(payload.get("filename", ""))).name)
+    if not filename:
+        return jsonify({"ok": False, "message": "Choose an icon to remove."}), 400
+
+    current_name = favicon_name()
+    saved_general = save_favicon_config("" if filename == current_name else current_name)
+    (FAVICON_UPLOAD_DIR / filename).unlink(missing_ok=True)
+
+    return jsonify(
+        {
+            "ok": True,
+            "removed": filename,
+            "favicon": saved_general.get("site.favicon", ""),
         }
     )
 
