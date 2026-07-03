@@ -11,7 +11,7 @@ import urllib.request
 from base64 import b64encode
 from datetime import datetime, timezone
 from email.message import EmailMessage
-from email.utils import formataddr
+from email.utils import format_datetime, formataddr, getaddresses, make_msgid, parseaddr
 from functools import wraps
 from pathlib import Path
 
@@ -361,6 +361,29 @@ def format_lead_notification(form_data: dict[str, str]) -> str:
     return body if len(body) <= 1550 else f"{body[:1546]}\n..."
 
 
+def email_address(value: str) -> str:
+    _name, address = parseaddr(value.strip())
+    return address if "@" in address else ""
+
+
+def email_recipients(value: str) -> list[str]:
+    recipients = []
+    seen = set()
+    for _name, address in getaddresses([value]):
+        normalized = address.strip()
+        if "@" not in normalized or normalized.lower() in seen:
+            continue
+        seen.add(normalized.lower())
+        recipients.append(normalized)
+    return recipients
+
+
+def email_domain(address: str) -> str:
+    if "@" not in address:
+        return ""
+    return address.rsplit("@", 1)[1].strip().lower()
+
+
 def lead_email_config() -> dict[str, str]:
     return {
         "enabled": content_value("general", "lead_email.enabled", "off").lower(),
@@ -393,29 +416,58 @@ def lead_email_html(form_data: dict[str, str]) -> str:
     detail_rows = "\n".join(
         f"""
         <tr>
-          <th style="padding:12px 16px;text-align:left;font:600 12px/1.4 Arial,sans-serif;text-transform:uppercase;color:#5e6b66;border-bottom:1px solid #e6ebe7;width:180px;">{html.escape(label)}</th>
-          <td style="padding:12px 16px;font:500 15px/1.5 Arial,sans-serif;color:#18211f;border-bottom:1px solid #e6ebe7;">{html.escape(value)}</td>
+          <th style="padding:14px 18px;text-align:left;font-family:Arial,sans-serif;font-size:11px;line-height:1.4;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5f6d68;border-bottom:1px solid #e4e9e5;width:170px;">{html.escape(label)}</th>
+          <td style="padding:14px 18px;font-family:Arial,sans-serif;font-size:15px;line-height:1.55;font-weight:600;color:#18211f;border-bottom:1px solid #e4e9e5;">{html.escape(value)}</td>
         </tr>
         """
         for label, value in rows
     )
     message = html.escape(form_data.get("message", "").strip()).replace("\n", "<br>")
+    preheader = f"New onlyPT lead from {form_data.get('name', '').strip() or 'the contact form'}"
     return f"""<!doctype html>
-<html>
-  <body style="margin:0;background:#f7f5ee;padding:28px;color:#18211f;">
-    <div style="max-width:680px;margin:0 auto;background:#fffffb;border:1px solid #dce8e3;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(24,33,31,0.10);">
-      <div style="padding:26px 30px;background:#18211f;color:#fffffb;">
-        <div style="font:700 13px/1 Arial,sans-serif;letter-spacing:0.12em;text-transform:uppercase;color:#dce8e3;">onlyPT Recruiting</div>
-        <h1 style="margin:12px 0 0;font:700 28px/1.15 Georgia,serif;color:#fffffb;">New contact form submission</h1>
-      </div>
-      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#fffffb;">
-        {detail_rows}
-      </table>
-      <div style="padding:24px 30px 30px;">
-        <div style="font:700 13px/1.4 Arial,sans-serif;text-transform:uppercase;color:#5e6b66;margin-bottom:10px;">Message</div>
-        <div style="font:500 16px/1.65 Arial,sans-serif;color:#18211f;background:#f7f5ee;border:1px solid #e6ebe7;border-radius:10px;padding:18px;">{message}</div>
-      </div>
-    </div>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>New onlyPT contact form submission</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f7f5ee;color:#18211f;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{html.escape(preheader)}</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#f7f5ee;">
+      <tr>
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;max-width:680px;border-collapse:collapse;background:#fffffb;border:1px solid #dce8e3;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 30px 26px;background:#fffffb;border-bottom:1px solid #dce8e3;">
+                <div style="font-family:Georgia,serif;font-size:32px;line-height:1;font-weight:700;color:#18211f;letter-spacing:0;">onlyPT</div>
+                <div style="margin-top:8px;font-family:Arial,sans-serif;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#1d6f67;">Recruiting contact notification</div>
+                <h1 style="margin:22px 0 0;font-family:Georgia,serif;font-size:34px;line-height:1.08;font-weight:700;color:#18211f;">New contact form submission</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;border-collapse:collapse;background:#fffffb;">
+                  {detail_rows}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:26px 30px 30px;background:#fffffb;">
+                <div style="font-family:Arial,sans-serif;font-size:11px;line-height:1.4;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#5f6d68;margin-bottom:12px;">Message</div>
+                <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.65;font-weight:500;color:#18211f;background:#f7f5ee;border:1px solid #e4e9e5;border-radius:8px;padding:18px;">{message}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 30px 24px;background:#f7f5ee;border-top:1px solid #e4e9e5;">
+                <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;color:#5f6d68;">This transactional notification was generated by the onlyPT website contact form. Replying to this email will reply to the submitter when their email address is valid.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   </body>
 </html>"""
 
@@ -425,8 +477,11 @@ def notify_lead_email(form_data: dict[str, str]) -> bool:
     if config["enabled"] != "on":
         return False
 
-    required = ["to", "from_email", "smtp_host", "smtp_port", "smtp_username", "smtp_password"]
-    if not all(config.get(key) for key in required):
+    sender_email = email_address(config["from_email"])
+    smtp_username = email_address(config["smtp_username"])
+    recipients = email_recipients(config["to"])
+    required = ["smtp_host", "smtp_port", "smtp_password"]
+    if not sender_email or not smtp_username or not recipients or not all(config.get(key) for key in required):
         log_notification_error("SMTP email notification is enabled but required settings are missing.")
         return False
 
@@ -438,11 +493,16 @@ def notify_lead_email(form_data: dict[str, str]) -> bool:
 
     message = EmailMessage()
     sender_name = config["from_name"]
+    sender_domain = email_domain(sender_email)
     message["Subject"] = "New onlyPT contact form submission"
-    message["From"] = formataddr((sender_name, config["from_email"]))
-    message["To"] = config["to"]
-    submitter_email = form_data.get("email", "").strip()
-    if "@" in submitter_email:
+    message["From"] = formataddr((sender_name, sender_email))
+    message["To"] = ", ".join(recipients)
+    message["Date"] = format_datetime(datetime.now(timezone.utc))
+    message["Message-ID"] = make_msgid(domain=sender_domain or None)
+    message["X-Auto-Response-Suppress"] = "All"
+    message["X-Entity-Ref-ID"] = f"onlypt-contact-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    submitter_email = email_address(form_data.get("email", ""))
+    if submitter_email:
         message["Reply-To"] = submitter_email
     message.set_content(format_lead_notification(form_data))
     message.add_alternative(lead_email_html(form_data), subtype="html")
@@ -450,14 +510,14 @@ def notify_lead_email(form_data: dict[str, str]) -> bool:
     try:
         if config["smtp_security"] == "ssl":
             with smtplib.SMTP_SSL(config["smtp_host"], port, timeout=10) as smtp:
-                smtp.login(config["smtp_username"], config["smtp_password"])
-                smtp.send_message(message)
+                smtp.login(smtp_username, config["smtp_password"])
+                smtp.send_message(message, from_addr=sender_email, to_addrs=recipients)
         else:
             with smtplib.SMTP(config["smtp_host"], port, timeout=10) as smtp:
                 if config["smtp_security"] in {"tls", "starttls"}:
                     smtp.starttls()
-                smtp.login(config["smtp_username"], config["smtp_password"])
-                smtp.send_message(message)
+                smtp.login(smtp_username, config["smtp_password"])
+                smtp.send_message(message, from_addr=sender_email, to_addrs=recipients)
     except (OSError, smtplib.SMTPException) as error:
         log_notification_error(f"SMTP email notification failed: {error}")
         return False
