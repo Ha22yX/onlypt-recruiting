@@ -660,6 +660,8 @@
           <small data-upload-status>Upload an ICO, PNG, SVG, or WebP icon for the browser tab.</small>
         </span>
       `;
+    } else if (field.type === "password") {
+      control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="password" autocomplete="new-password" value="${escapeHtml(value)}">`;
     } else {
       control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="text" value="${escapeHtml(value)}">`;
     }

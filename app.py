@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import csv
+import html
 import json
 import os
+import smtplib
 import urllib.error
 import urllib.parse
 import urllib.request
 from base64 import b64encode
 from datetime import datetime, timezone
+from email.message import EmailMessage
+from email.utils import formataddr
 from functools import wraps
 from pathlib import Path
 
@@ -84,6 +88,15 @@ CONTENT_PAGES = {
             cms_field("footer.contact", "Footer link: Contact", "Contact", group="Footer"),
             cms_field("footer.admin", "Footer link: Admin", "Admin", group="Footer"),
             cms_field("site.favicon", "Page tab icon", "", "favicon", "Page Tab"),
+            cms_field("lead_email.enabled", "Send email lead notifications", "off", "toggle", "Email Notifications"),
+            cms_field("lead_email.to", "Admin notification email", "", group="Email Notifications"),
+            cms_field("lead_email.from_email", "Sender email address", "", group="Email Notifications"),
+            cms_field("lead_email.from_name", "Sender display name", "onlyPT Recruiting", group="Email Notifications"),
+            cms_field("lead_email.smtp_host", "SMTP server", "smtppro.zoho.com", group="Email Notifications"),
+            cms_field("lead_email.smtp_port", "SMTP port", "465", group="Email Notifications"),
+            cms_field("lead_email.smtp_security", "SMTP security", "ssl", group="Email Notifications"),
+            cms_field("lead_email.smtp_username", "SMTP username", "", group="Email Notifications"),
+            cms_field("lead_email.smtp_password", "SMTP password", "", "password", "Email Notifications"),
             cms_field("background.enabled", "Use uploaded site background", "off", "toggle", "Background"),
             cms_field("background.image", "Site background photo", "", "image", "Background"),
         ],
@@ -346,6 +359,110 @@ def format_lead_notification(form_data: dict[str, str]) -> str:
     ]
     body = "\n".join(lines).strip()
     return body if len(body) <= 1550 else f"{body[:1546]}\n..."
+
+
+def lead_email_config() -> dict[str, str]:
+    return {
+        "enabled": content_value("general", "lead_email.enabled", "off").lower(),
+        "to": content_value("general", "lead_email.to", "").strip(),
+        "from_email": content_value("general", "lead_email.from_email", "").strip(),
+        "from_name": content_value("general", "lead_email.from_name", "onlyPT Recruiting").strip() or "onlyPT Recruiting",
+        "smtp_host": content_value("general", "lead_email.smtp_host", "smtppro.zoho.com").strip(),
+        "smtp_port": content_value("general", "lead_email.smtp_port", "465").strip(),
+        "smtp_security": content_value("general", "lead_email.smtp_security", "ssl").strip().lower(),
+        "smtp_username": content_value("general", "lead_email.smtp_username", "").strip(),
+        "smtp_password": content_value("general", "lead_email.smtp_password", "").strip(),
+    }
+
+
+def lead_email_html(form_data: dict[str, str]) -> str:
+    audience_label = {
+        "employer": "Healthcare employer",
+        "therapist": "Physical Therapist",
+    }.get(form_data.get("audience", ""), form_data.get("audience", "Unknown"))
+    submitted_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    rows = [
+        ("Audience", audience_label),
+        ("Name", form_data.get("name", "").strip()),
+        ("Email", form_data.get("email", "").strip()),
+        ("Phone", form_data.get("phone", "").strip() or "-"),
+        ("Organization", form_data.get("organization", "").strip() or "-"),
+        ("Role / setting", form_data.get("role", "").strip() or "-"),
+        ("Submitted", submitted_at),
+    ]
+    detail_rows = "\n".join(
+        f"""
+        <tr>
+          <th style="padding:12px 16px;text-align:left;font:600 12px/1.4 Arial,sans-serif;text-transform:uppercase;color:#5e6b66;border-bottom:1px solid #e6ebe7;width:180px;">{html.escape(label)}</th>
+          <td style="padding:12px 16px;font:500 15px/1.5 Arial,sans-serif;color:#18211f;border-bottom:1px solid #e6ebe7;">{html.escape(value)}</td>
+        </tr>
+        """
+        for label, value in rows
+    )
+    message = html.escape(form_data.get("message", "").strip()).replace("\n", "<br>")
+    return f"""<!doctype html>
+<html>
+  <body style="margin:0;background:#f7f5ee;padding:28px;color:#18211f;">
+    <div style="max-width:680px;margin:0 auto;background:#fffffb;border:1px solid #dce8e3;border-radius:12px;overflow:hidden;box-shadow:0 20px 60px rgba(24,33,31,0.10);">
+      <div style="padding:26px 30px;background:#18211f;color:#fffffb;">
+        <div style="font:700 13px/1 Arial,sans-serif;letter-spacing:0.12em;text-transform:uppercase;color:#dce8e3;">onlyPT Recruiting</div>
+        <h1 style="margin:12px 0 0;font:700 28px/1.15 Georgia,serif;color:#fffffb;">New contact form submission</h1>
+      </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#fffffb;">
+        {detail_rows}
+      </table>
+      <div style="padding:24px 30px 30px;">
+        <div style="font:700 13px/1.4 Arial,sans-serif;text-transform:uppercase;color:#5e6b66;margin-bottom:10px;">Message</div>
+        <div style="font:500 16px/1.65 Arial,sans-serif;color:#18211f;background:#f7f5ee;border:1px solid #e6ebe7;border-radius:10px;padding:18px;">{message}</div>
+      </div>
+    </div>
+  </body>
+</html>"""
+
+
+def notify_lead_email(form_data: dict[str, str]) -> bool:
+    config = lead_email_config()
+    if config["enabled"] != "on":
+        return False
+
+    required = ["to", "from_email", "smtp_host", "smtp_port", "smtp_username", "smtp_password"]
+    if not all(config.get(key) for key in required):
+        log_notification_error("SMTP email notification is enabled but required settings are missing.")
+        return False
+
+    try:
+        port = int(config["smtp_port"])
+    except ValueError:
+        log_notification_error(f"SMTP email notification has invalid port: {config['smtp_port']}")
+        return False
+
+    message = EmailMessage()
+    sender_name = config["from_name"]
+    message["Subject"] = "New onlyPT contact form submission"
+    message["From"] = formataddr((sender_name, config["from_email"]))
+    message["To"] = config["to"]
+    submitter_email = form_data.get("email", "").strip()
+    if "@" in submitter_email:
+        message["Reply-To"] = submitter_email
+    message.set_content(format_lead_notification(form_data))
+    message.add_alternative(lead_email_html(form_data), subtype="html")
+
+    try:
+        if config["smtp_security"] == "ssl":
+            with smtplib.SMTP_SSL(config["smtp_host"], port, timeout=10) as smtp:
+                smtp.login(config["smtp_username"], config["smtp_password"])
+                smtp.send_message(message)
+        else:
+            with smtplib.SMTP(config["smtp_host"], port, timeout=10) as smtp:
+                if config["smtp_security"] in {"tls", "starttls"}:
+                    smtp.starttls()
+                smtp.login(config["smtp_username"], config["smtp_password"])
+                smtp.send_message(message)
+    except (OSError, smtplib.SMTPException) as error:
+        log_notification_error(f"SMTP email notification failed: {error}")
+        return False
+
+    return True
 
 
 def notify_lead_whatsapp(form_data: dict[str, str]) -> bool:
@@ -690,6 +807,7 @@ def contact():
 
         lead_data = request.form.to_dict()
         write_lead(lead_data)
+        notify_lead_email(lead_data)
         notify_lead_whatsapp(lead_data)
         flash(cms_text("contact", "flash.success"), "success")
         return redirect(url_for("contact"))
