@@ -1345,6 +1345,175 @@
     rgba(255, 255, 251, 0.48);
 }
 
+/* Admin editor hierarchy polish */
+.admin-page-tabs {
+  position: relative;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(24, 33, 31, 0.16);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 251, 0.72),
+    0 12px 24px rgba(24, 33, 31, 0.045);
+}
+
+.admin-page-tabs::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(29, 111, 103, 0.28), transparent);
+}
+
+.admin-page-tabs button {
+  min-height: 46px;
+}
+
+.admin-page-tabs button[data-page-switch="email"] span {
+  color: var(--teal-dark);
+}
+
+.admin-field-panel-head {
+  display: grid;
+  gap: 4px;
+  padding: 15px 16px 13px;
+  border-bottom: 1px solid rgba(24, 33, 31, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 251, 0.92), rgba(220, 232, 227, 0.38)),
+    rgba(255, 255, 251, 0.8);
+}
+
+.admin-field-panel-head p {
+  margin: 0;
+  color: var(--teal-dark);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.admin-field-panel-head strong {
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 1.46rem;
+  line-height: 1;
+}
+
+.admin-field-list {
+  padding-top: 14px;
+  background:
+    linear-gradient(180deg, rgba(24, 33, 31, 0.035), transparent 22px),
+    linear-gradient(180deg, rgba(255, 255, 251, 0.2), rgba(255, 255, 251, 0.62));
+}
+
+.admin-field-group-hint,
+.admin-field-hint {
+  margin: 0;
+  color: rgba(57, 69, 64, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  font-weight: 650;
+}
+
+.admin-field-group-hint {
+  padding: 11px 14px 2px;
+}
+
+.admin-field-hint {
+  margin: -2px 0 10px;
+}
+
+.admin-favicon-preview-list {
+  min-height: 84px;
+  align-items: center;
+  padding: 12px;
+}
+
+.admin-favicon-preview-list > em {
+  justify-self: start;
+  font-size: 0.82rem;
+}
+
+.admin-favicon-thumb {
+  position: relative;
+  width: 92px;
+  min-height: 74px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(29, 111, 103, 0.08), rgba(255, 255, 251, 0.92)),
+    rgba(255, 255, 251, 0.86);
+}
+
+.admin-favicon-thumb img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  opacity: 1;
+}
+
+.admin-favicon-thumb button {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 251, 0.52);
+  border-radius: 999px;
+  background: rgba(23, 32, 29, 0.72);
+  color: #fffffb;
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-editor[data-admin-page="email"] .admin-field-group {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 251, 0.8), rgba(220, 232, 227, 0.2)),
+    rgba(255, 255, 251, 0.58);
+}
+
+.admin-editor[data-admin-page="email"] .admin-field-row-primary {
+  margin: 8px 0 4px;
+  padding: 16px;
+  border: 1px solid rgba(29, 111, 103, 0.3);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(220, 232, 227, 0.62), rgba(255, 255, 251, 0.94)),
+    rgba(255, 255, 251, 0.92);
+  box-shadow: 0 14px 32px rgba(24, 33, 31, 0.08);
+}
+
+.admin-editor[data-admin-page="email"] .admin-field-row-primary .admin-field-meta span {
+  font-size: 1.04rem;
+}
+
+.admin-editor[data-admin-page="email"] .admin-field-row-primary input {
+  min-height: 52px;
+  font-size: 1rem;
+  font-weight: 750;
+  background: rgba(255, 255, 251, 0.96);
+}
+
+.admin-editor[data-admin-page="email"] .admin-field-group[data-field-group="SMTP access"] {
+  opacity: 0.94;
+}
+
+.admin-editor[data-admin-page="email"] .admin-field-group[data-field-group="SMTP access"] .admin-field-group-body {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 12px;
+}
+
+.admin-editor[data-admin-page="email"] [data-field-key="lead_email.smtp_host"],
+.admin-editor[data-admin-page="email"] [data-field-key="lead_email.smtp_username"],
+.admin-editor[data-admin-page="email"] [data-field-key="lead_email.smtp_password"] {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1100px) {
   .admin-editor {
     grid-template-columns: 1fr;
@@ -1390,6 +1559,10 @@
   }
 
   .admin-page-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-editor[data-admin-page="email"] .admin-field-group[data-field-group="SMTP access"] .admin-field-group-body {
     grid-template-columns: 1fr;
   }
 

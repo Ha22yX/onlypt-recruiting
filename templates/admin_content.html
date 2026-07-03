@@ -36,6 +36,10 @@
     </nav>
 
     <form id="admin-content-form" class="admin-field-form">
+      <div class="admin-field-panel-head">
+        <p>Editing fields</p>
+        <strong data-admin-field-panel-title>{{ editing_page.label }}</strong>
+      </div>
       <div class="admin-field-list" data-admin-field-list></div>
 
       <div class="admin-save-bar">
@@ -62,5 +66,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{{ url_for('static', filename='js/admin.js') }}?v=20260704-email1"></script>
+  <script src="{{ url_for('static', filename='js/admin.js') }}?v=20260704-admin-structure1"></script>
 {% endblock %}

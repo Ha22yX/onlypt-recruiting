@@ -11,6 +11,7 @@
   const status = document.querySelector("#admin-save-status");
   const pageTitle = document.querySelector("[data-admin-page-title]");
   const previewTitle = document.querySelector("[data-admin-preview-title]");
+  const fieldPanelTitle = document.querySelector("[data-admin-field-panel-title]");
   const previewOpen = document.querySelector("[data-admin-preview-open]");
   const pageButtons = Array.from(document.querySelectorAll("[data-page-switch]"));
   const saveButton = document.querySelector("[data-save-button]");
@@ -285,7 +286,7 @@
 
     preview.classList.add("has-image");
     preview.innerHTML = `
-      <span class="admin-background-thumb" data-favicon-thumb="${escapeHtml(imageName)}">
+      <span class="admin-favicon-thumb" data-favicon-thumb="${escapeHtml(imageName)}">
         <img src="${escapeHtml(faviconUrl(imageName))}" alt="" loading="lazy" decoding="async">
         <button type="button" data-remove-favicon="${escapeHtml(imageName)}">Remove</button>
       </span>
@@ -606,8 +607,50 @@
     setStatus("Editing target highlighted in the preview.", "");
   };
 
+  const fieldHint = (field) => {
+    if (pageKey !== "email") {
+      return "";
+    }
+
+    const hints = {
+      "lead_email.to": "Primary destination for every contact form notification. Use one or more admin emails separated by commas.",
+      "lead_email.enabled": "Keep this on when contact form submissions should trigger email alerts.",
+      "lead_email.from_email": "Use the Zoho mailbox address so SPF/DKIM alignment stays clean.",
+      "lead_email.from_name": "This is the display name admins see in their inbox.",
+      "lead_email.smtp_host": "Rarely changes after setup. Zoho usually uses smtppro.zoho.com.",
+      "lead_email.smtp_port": "Use 465 for SSL or 587 for TLS.",
+      "lead_email.smtp_security": "Use ssl for port 465 or tls for port 587.",
+      "lead_email.smtp_username": "Usually the same full mailbox address as the sender email.",
+      "lead_email.smtp_password": "Use the mailbox password or a Zoho app password when enabled.",
+    };
+
+    return hints[field.key] || "";
+  };
+
+  const groupHint = (groupName) => {
+    if (pageKey !== "email") {
+      return "";
+    }
+
+    const hints = {
+      "Notification target": "Who receives contact form alerts. This is the setting you are most likely to edit.",
+      "Sender identity": "Inbox-facing sender details. Keep these aligned with the Zoho mailbox.",
+      "SMTP access": "Connection details for Zoho. These should only change when the mailbox or provider changes.",
+    };
+
+    return hints[groupName] || "";
+  };
+
   const fieldTemplate = (field, value) => {
     let control = "";
+    const hint = fieldHint(field);
+    const rowClasses = ["admin-field-row"];
+    if (pageKey === "email" && field.key === "lead_email.to") {
+      rowClasses.push("admin-field-row-primary");
+    }
+    if (field.type === "favicon") {
+      rowClasses.push("admin-field-row-favicon");
+    }
     if (field.type === "textarea") {
       control = `<textarea data-editor-input data-cms-key="${escapeHtml(field.key)}" rows="4">${escapeHtml(value)}</textarea>`;
     } else if (field.type === "toggle") {
@@ -644,11 +687,11 @@
       control = `
         <input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="hidden" value="${escapeHtml(imageName)}">
         <span class="admin-image-control admin-image-control-list" data-favicon-control>
-          <span class="admin-image-preview-list ${imageName ? "has-image" : ""}" data-favicon-preview-list>
+          <span class="admin-image-preview-list admin-favicon-preview-list ${imageName ? "has-image" : ""}" data-favicon-preview-list>
             ${
               imageName
                 ? `
-                  <span class="admin-background-thumb" data-favicon-thumb="${escapeHtml(imageName)}">
+                  <span class="admin-favicon-thumb" data-favicon-thumb="${escapeHtml(imageName)}">
                     <img src="${escapeHtml(faviconUrl(imageName))}" alt="" loading="lazy" decoding="async">
                     <button type="button" data-remove-favicon="${escapeHtml(imageName)}">Remove</button>
                   </span>
@@ -667,11 +710,12 @@
     }
 
     return `
-      <label class="admin-field-row" data-field-card data-field-key="${escapeHtml(field.key)}">
+      <label class="${rowClasses.join(" ")}" data-field-card data-field-key="${escapeHtml(field.key)}" data-field-type="${escapeHtml(field.type || "text")}">
         <span class="admin-field-meta">
           <span>${escapeHtml(field.label)}</span>
           <small>${escapeHtml(field.key)}</small>
         </span>
+        ${hint ? `<p class="admin-field-hint">${escapeHtml(hint)}</p>` : ""}
         ${control}
       </label>
     `;
@@ -688,12 +732,14 @@
           html += `</div></section>`;
         }
         activeGroup = field.group;
+        const hint = groupHint(activeGroup);
         html += `
           <section class="admin-field-group" data-field-group="${escapeHtml(activeGroup)}">
             <header class="admin-field-group-label">
               <span>${escapeHtml(activeGroup)}</span>
               <small>${page.fields.filter((item) => item.group === activeGroup).length} fields</small>
             </header>
+            ${hint ? `<p class="admin-field-group-hint">${escapeHtml(hint)}</p>` : ""}
             <div class="admin-field-group-body">
         `;
       }
@@ -834,6 +880,7 @@
     editor.dataset.adminPage = pageKey;
     if (pageTitle) pageTitle.textContent = page.label;
     if (previewTitle) previewTitle.textContent = page.label;
+    if (fieldPanelTitle) fieldPanelTitle.textContent = page.label;
     if (previewOpen) previewOpen.href = page.previewUrl;
 
     pageButtons.forEach((button) => {

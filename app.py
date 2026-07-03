@@ -88,17 +88,23 @@ CONTENT_PAGES = {
             cms_field("footer.contact", "Footer link: Contact", "Contact", group="Footer"),
             cms_field("footer.admin", "Footer link: Admin", "Admin", group="Footer"),
             cms_field("site.favicon", "Page tab icon", "", "favicon", "Page Tab"),
-            cms_field("lead_email.enabled", "Send email lead notifications", "off", "toggle", "Email Notifications"),
-            cms_field("lead_email.to", "Admin notification email", "", group="Email Notifications"),
-            cms_field("lead_email.from_email", "Sender email address", "", group="Email Notifications"),
-            cms_field("lead_email.from_name", "Sender display name", "onlyPT Recruiting", group="Email Notifications"),
-            cms_field("lead_email.smtp_host", "SMTP server", "smtppro.zoho.com", group="Email Notifications"),
-            cms_field("lead_email.smtp_port", "SMTP port", "465", group="Email Notifications"),
-            cms_field("lead_email.smtp_security", "SMTP security", "ssl", group="Email Notifications"),
-            cms_field("lead_email.smtp_username", "SMTP username", "", group="Email Notifications"),
-            cms_field("lead_email.smtp_password", "SMTP password", "", "password", "Email Notifications"),
             cms_field("background.enabled", "Use uploaded site background", "off", "toggle", "Background"),
             cms_field("background.image", "Site background photo", "", "image", "Background"),
+        ],
+    },
+    "email": {
+        "label": "Email Notifications",
+        "endpoint": "contact",
+        "fields": [
+            cms_field("lead_email.to", "Admin notification email", "", group="Notification target"),
+            cms_field("lead_email.enabled", "Send email lead notifications", "off", "toggle", "Notification target"),
+            cms_field("lead_email.from_email", "Sender email address", "", group="Sender identity"),
+            cms_field("lead_email.from_name", "Sender display name", "onlyPT Recruiting", group="Sender identity"),
+            cms_field("lead_email.smtp_host", "SMTP server", "smtppro.zoho.com", group="SMTP access"),
+            cms_field("lead_email.smtp_port", "SMTP port", "465", group="SMTP access"),
+            cms_field("lead_email.smtp_security", "SMTP security", "ssl", group="SMTP access"),
+            cms_field("lead_email.smtp_username", "SMTP username", "", group="SMTP access"),
+            cms_field("lead_email.smtp_password", "SMTP password", "", "password", "SMTP access"),
         ],
     },
     "home": {
@@ -385,16 +391,23 @@ def email_domain(address: str) -> str:
 
 
 def lead_email_config() -> dict[str, str]:
+    email_values = load_content_overrides().get("email", {})
+
+    def email_setting(field_key: str, fallback: str = "") -> str:
+        if field_key in email_values:
+            return str(email_values.get(field_key, "")).strip()
+        return content_value("general", field_key, fallback).strip()
+
     return {
-        "enabled": content_value("general", "lead_email.enabled", "off").lower(),
-        "to": content_value("general", "lead_email.to", "").strip(),
-        "from_email": content_value("general", "lead_email.from_email", "").strip(),
-        "from_name": content_value("general", "lead_email.from_name", "onlyPT Recruiting").strip() or "onlyPT Recruiting",
-        "smtp_host": content_value("general", "lead_email.smtp_host", "smtppro.zoho.com").strip(),
-        "smtp_port": content_value("general", "lead_email.smtp_port", "465").strip(),
-        "smtp_security": content_value("general", "lead_email.smtp_security", "ssl").strip().lower(),
-        "smtp_username": content_value("general", "lead_email.smtp_username", "").strip(),
-        "smtp_password": content_value("general", "lead_email.smtp_password", "").strip(),
+        "enabled": email_setting("lead_email.enabled", "off").lower(),
+        "to": email_setting("lead_email.to"),
+        "from_email": email_setting("lead_email.from_email"),
+        "from_name": email_setting("lead_email.from_name", "onlyPT Recruiting") or "onlyPT Recruiting",
+        "smtp_host": email_setting("lead_email.smtp_host", "smtppro.zoho.com"),
+        "smtp_port": email_setting("lead_email.smtp_port", "465"),
+        "smtp_security": email_setting("lead_email.smtp_security", "ssl").lower(),
+        "smtp_username": email_setting("lead_email.smtp_username"),
+        "smtp_password": email_setting("lead_email.smtp_password"),
     }
 
 
@@ -594,6 +607,16 @@ def content_value(page_key: str, field_key: str, fallback: str | None = None) ->
     if page_key == "general" and field_key == "background.images" and not page_values.get(field_key):
         return page_values.get("background.image", default)
     return page_values.get(field_key, default)
+
+
+def editor_content_value(page_key: str, field_key: str, fallback: str | None = None) -> str:
+    if page_key == "email":
+        page_values = load_content_overrides().get("email", {})
+        if field_key in page_values:
+            return str(page_values.get(field_key, ""))
+        return content_value("general", field_key, fallback)
+
+    return content_value(page_key, field_key, fallback)
 
 
 def save_content_values(page_key: str, values: dict[str, str]) -> dict[str, str]:
@@ -950,7 +973,7 @@ def admin_content(page_key: str):
             "label": content_page_meta["label"],
             "fields": content_page_meta["fields"],
             "values": {
-                field["key"]: content_value(content_page_key, field["key"], field["default"])
+                field["key"]: editor_content_value(content_page_key, field["key"], field["default"])
                 for field in content_page_meta["fields"]
             },
             "previewUrl": url_for(content_page_meta["endpoint"], admin_preview=1),
