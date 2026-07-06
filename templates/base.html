@@ -30,10 +30,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260704-brand-favicon1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260706-persistent-background1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260706-nav-indicator1">
     {% block extra_head %}{% endblock %}
     <script src="https://unpkg.com/lucide@latest" defer></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260706-persistent-background1" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260706-nav-indicator1" defer></script>
   </head>
   <body
     class="{{ 'site-background-enabled' if site_background_enabled else '' }}"
@@ -81,6 +81,7 @@
         <i data-lucide="menu"></i>
       </button>
       <nav class="site-nav" aria-label="Primary navigation">
+        <span class="nav-active-indicator" aria-hidden="true"></span>
         {% for key, field_key, endpoint in nav_items %}
           <a class="{{ 'active' if page == key else '' }}" href="{{ url_for(endpoint) }}"><span {{ cms_attrs('general', field_key) }}>{{ cms_text('general', field_key) }}</span></a>
         {% endfor %}

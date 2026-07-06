@@ -55,6 +55,74 @@ window.addEventListener("DOMContentLoaded", () => {
   const nav = document.querySelector(".site-nav");
   const siteHeader = document.querySelector(".site-header");
   const mobileNavQuery = mobileLiteQuery;
+  let navIndicatorFrame = null;
+
+  const ensureNavIndicator = () => {
+    if (!nav) {
+      return null;
+    }
+
+    let indicator = nav.querySelector(".nav-active-indicator");
+    if (!indicator) {
+      indicator = document.createElement("span");
+      indicator.className = "nav-active-indicator";
+      indicator.setAttribute("aria-hidden", "true");
+      nav.prepend(indicator);
+    }
+    return indicator;
+  };
+
+  const syncNavIndicator = (target = nav?.querySelector("a.active"), options = {}) => {
+    if (!nav || mobileNavQuery.matches) {
+      return;
+    }
+
+    const indicator = ensureNavIndicator();
+    const activeLink = target || nav.querySelector("a.active");
+    if (!indicator || !activeLink) {
+      return;
+    }
+
+    if (navIndicatorFrame) {
+      window.cancelAnimationFrame(navIndicatorFrame);
+    }
+
+    navIndicatorFrame = window.requestAnimationFrame(() => {
+      const navRect = nav.getBoundingClientRect();
+      const linkRect = activeLink.getBoundingClientRect();
+      const x = linkRect.left - navRect.left;
+      const y = linkRect.top - navRect.top;
+      indicator.style.setProperty("--nav-indicator-x", `${x.toFixed(2)}px`);
+      indicator.style.setProperty("--nav-indicator-y", `${y.toFixed(2)}px`);
+      indicator.style.setProperty("--nav-indicator-width", `${linkRect.width.toFixed(2)}px`);
+      indicator.style.setProperty("--nav-indicator-height", `${linkRect.height.toFixed(2)}px`);
+      indicator.classList.toggle("is-instant", Boolean(options.instant));
+      nav.classList.add("has-active-indicator");
+      window.setTimeout(() => indicator.classList.remove("is-instant"), 80);
+    });
+  };
+
+  const markNavTarget = (link) => {
+    if (!nav || !link) {
+      return;
+    }
+    nav.querySelectorAll("a").forEach((navLink) => {
+      navLink.classList.toggle("active", navLink === link);
+    });
+    syncNavIndicator(link);
+  };
+
+  const bindNavLinks = () => {
+    nav?.querySelectorAll("a").forEach((link) => {
+      if (link.dataset.navMotionReady === "true") {
+        return;
+      }
+      link.dataset.navMotionReady = "true";
+      link.addEventListener("click", closeNav);
+      link.addEventListener("pointerenter", () => syncNavIndicator(link));
+      link.addEventListener("pointerleave", () => syncNavIndicator(nav.querySelector("a.active")));
+    });
+  };
 
   const syncNavState = () => {
     if (!nav) {
@@ -67,6 +135,7 @@ window.addEventListener("DOMContentLoaded", () => {
       nav.classList.remove("open");
       nav.removeAttribute("aria-hidden");
       navToggle?.setAttribute("aria-expanded", "false");
+      syncNavIndicator(nav.querySelector("a.active"), { instant: true });
     }
   };
 
@@ -98,9 +167,7 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  nav?.querySelectorAll("a").forEach((link) => {
-    link.addEventListener("click", closeNav);
-  });
+  bindNavLinks();
 
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -109,7 +176,10 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   syncNavState();
+  ensureNavIndicator();
+  syncNavIndicator(nav?.querySelector("a.active"), { instant: true });
   watchMediaQuery(mobileNavQuery, syncNavState);
+  window.addEventListener("resize", () => syncNavIndicator(nav?.querySelector("a.active"), { instant: true }), { passive: true });
 
   const initStaticBackground = () => {
     const backgroundApi = (window.onlyPTBackgroundSlideshow = window.onlyPTBackgroundSlideshow || {});
@@ -335,9 +405,9 @@ window.addEventListener("DOMContentLoaded", () => {
     const currentNav = document.querySelector(".site-nav");
     if (nextNav && currentNav) {
       currentNav.innerHTML = nextNav.innerHTML;
-      currentNav.querySelectorAll("a").forEach((link) => {
-        link.addEventListener("click", closeNav);
-      });
+      ensureNavIndicator();
+      bindNavLinks();
+      syncNavIndicator(currentNav.querySelector("a.active"));
     }
 
     const nextHeaderCta = nextDocument.querySelector(".header-cta");
@@ -416,6 +486,9 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     event.preventDefault();
+    if (link.closest(".site-nav")) {
+      markNavTarget(link);
+    }
     navigatePjax(link.href);
   });
 
