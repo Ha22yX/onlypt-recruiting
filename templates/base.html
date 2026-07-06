@@ -30,10 +30,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260704-brand-favicon1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260706-nav-indicator1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260706-nav-indicator2">
     {% block extra_head %}{% endblock %}
     <script src="https://unpkg.com/lucide@latest" defer></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260706-nav-indicator1" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260706-nav-indicator2" defer></script>
   </head>
   <body
     class="{{ 'site-background-enabled' if site_background_enabled else '' }}"

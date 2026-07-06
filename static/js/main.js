@@ -119,8 +119,6 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       link.dataset.navMotionReady = "true";
       link.addEventListener("click", closeNav);
-      link.addEventListener("pointerenter", () => syncNavIndicator(link));
-      link.addEventListener("pointerleave", () => syncNavIndicator(nav.querySelector("a.active")));
     });
   };
 
