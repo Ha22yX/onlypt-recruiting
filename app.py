@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from markupsafe import Markup, escape
+from PIL import Image, UnidentifiedImageError
 from werkzeug.utils import secure_filename
 
 
@@ -42,6 +43,7 @@ UPLOAD_DIR = Path(app.instance_path) / "uploads"
 BACKGROUND_UPLOAD_DIR = UPLOAD_DIR / "backgrounds"
 FAVICON_UPLOAD_DIR = UPLOAD_DIR / "favicons"
 STATIC_FAVICON_FILE = Path(app.root_path) / "static" / "favicon.ico"
+STATIC_FAVICON_PNG_FILE = Path(app.root_path) / "static" / "favicon-192.png"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
 try:
@@ -2178,7 +2180,39 @@ def favicon_url() -> str:
 
 
 def stable_favicon_url() -> str:
-    return url_for("site_favicon") if STATIC_FAVICON_FILE.exists() or favicon_name() else ""
+    return url_for("site_favicon") if STATIC_FAVICON_FILE.exists() and STATIC_FAVICON_PNG_FILE.exists() else ""
+
+
+def regenerate_static_favicon(source_path: Path) -> bool:
+    try:
+        with Image.open(source_path) as source_image:
+            image = source_image.convert("RGBA")
+    except (OSError, UnidentifiedImageError) as error:
+        log_notification_error(f"Favicon regeneration failed: {error}")
+        return False
+
+    width, height = image.size
+    side = max(width, height)
+    canvas = Image.new("RGBA", (side, side), (255, 255, 255, 0))
+    canvas.alpha_composite(image, ((side - width) // 2, (side - height) // 2))
+    icon = canvas.resize((192, 192), Image.Resampling.LANCZOS)
+
+    STATIC_FAVICON_PNG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    icon.save(STATIC_FAVICON_PNG_FILE)
+    icon.save(STATIC_FAVICON_FILE, sizes=[(16, 16), (32, 32), (48, 48), (96, 96), (192, 192)])
+
+    try:
+        root_favicon = Path(app.root_path) / "favicon.ico"
+        icon.save(root_favicon, sizes=[(16, 16), (32, 32), (48, 48), (96, 96), (192, 192)])
+    except OSError as error:
+        log_notification_error(f"Root favicon write failed: {error}")
+    return True
+
+
+def clear_static_favicon() -> None:
+    STATIC_FAVICON_FILE.unlink(missing_ok=True)
+    STATIC_FAVICON_PNG_FILE.unlink(missing_ok=True)
+    (Path(app.root_path) / "favicon.ico").unlink(missing_ok=True)
 
 
 def canonical_url_for(endpoint: str) -> str:
@@ -2824,7 +2858,12 @@ def admin_upload_favicon():
     extension = Path(original_name).suffix.lower()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
     filename = f"site-favicon-{stamp}{extension}"
-    upload.save(FAVICON_UPLOAD_DIR / filename)
+    saved_path = FAVICON_UPLOAD_DIR / filename
+    upload.save(saved_path)
+
+    if not regenerate_static_favicon(saved_path):
+        saved_path.unlink(missing_ok=True)
+        return jsonify({"ok": False, "message": "Use a PNG, ICO, or WebP icon that can be converted for search results."}), 400
 
     saved_general = save_favicon_config(filename)
     if previous_name and previous_name != filename:
@@ -2851,6 +2890,8 @@ def admin_delete_favicon():
     current_name = favicon_name()
     saved_general = save_favicon_config("" if filename == current_name else current_name)
     (FAVICON_UPLOAD_DIR / filename).unlink(missing_ok=True)
+    if filename == current_name:
+        clear_static_favicon()
 
     return jsonify(
         {
