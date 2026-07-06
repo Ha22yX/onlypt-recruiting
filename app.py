@@ -41,6 +41,7 @@ CONTENT_FILE = Path(app.instance_path) / "content_overrides.json"
 UPLOAD_DIR = Path(app.instance_path) / "uploads"
 BACKGROUND_UPLOAD_DIR = UPLOAD_DIR / "backgrounds"
 FAVICON_UPLOAD_DIR = UPLOAD_DIR / "favicons"
+STATIC_FAVICON_FILE = Path(app.root_path) / "static" / "favicon.ico"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
 try:
@@ -2176,6 +2177,10 @@ def favicon_url() -> str:
     return url_for("uploaded_favicon", filename=image_name) if image_name else ""
 
 
+def stable_favicon_url() -> str:
+    return url_for("site_favicon") if STATIC_FAVICON_FILE.exists() or favicon_name() else ""
+
+
 def canonical_url_for(endpoint: str) -> str:
     path = url_for(endpoint)
     return f"{SITE_URL}{path if path.startswith('/') else f'/{path}'}"
@@ -2345,6 +2350,7 @@ def inject_site_context():
         "site_background_url": site_background_urls[0] if site_background_urls else "",
         "site_background_urls": site_background_urls,
         "site_favicon_url": favicon_url(),
+        "stable_favicon_url": stable_favicon_url(),
         "first_block_start_height": first_block_start_height(),
         "seo": seo_context_for(request.endpoint),
     }
@@ -2463,6 +2469,16 @@ def uploaded_favicon(filename: str):
     if safe_name != filename:
         abort(404)
     return send_from_directory(FAVICON_UPLOAD_DIR, safe_name)
+
+
+@app.get("/favicon.ico")
+def site_favicon():
+    if STATIC_FAVICON_FILE.exists():
+        return send_from_directory(STATIC_FAVICON_FILE.parent, STATIC_FAVICON_FILE.name, max_age=86400)
+    image_name = favicon_name()
+    if not image_name:
+        abort(404)
+    return send_from_directory(FAVICON_UPLOAD_DIR, image_name, max_age=86400)
 
 
 @app.get("/admin")
