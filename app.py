@@ -1303,6 +1303,7 @@ def process_scheduled_traffic_reports(reference: datetime | None = None) -> int:
     if daily_due:
         report_sections.append(traffic_report_section_data("day", yesterday))
     if weekly_due:
+        # Keep weekly independent so it still sends alone when daily reports are off.
         report_sections.append(traffic_report_section_data("week", weekly_reference))
 
     if report_sections and send_combined_scheduled_traffic_report(report_sections, config["to"]):

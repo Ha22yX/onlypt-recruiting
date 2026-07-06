@@ -683,7 +683,7 @@
       "lead_email.to": "Primary destination for every contact form notification. Use one or more admin emails separated by commas.",
       "lead_email.enabled": "Keep this on when contact form submissions should trigger email alerts.",
       "traffic_report.daily_enabled": "Sends the previous day's traffic report after the day closes.",
-      "traffic_report.weekly_enabled": "Adds the previous Sunday-Saturday weekly report to Sunday's daily report.",
+      "traffic_report.weekly_enabled": "Sends the previous Sunday-Saturday report on Sunday. If daily is also enabled, it is combined into that day's daily report.",
       "traffic_report.send_time": "New York time. Reports are checked by the minute and sent after this time.",
       "lead_email.from_email": "Use the Zoho mailbox address so SPF/DKIM alignment stays clean.",
       "lead_email.from_name": "This is the display name admins see in their inbox.",
