@@ -2381,14 +2381,48 @@
   text-transform: uppercase;
 }
 
+.traffic-group-row {
+  cursor: pointer;
+  transition: background 180ms ease, box-shadow 180ms ease, outline-color 180ms ease;
+}
+
+.traffic-group-row:hover,
+.traffic-group-row:focus-visible {
+  background: rgba(220, 232, 227, 0.24);
+  outline: 2px solid rgba(29, 111, 103, 0.16);
+  outline-offset: -2px;
+}
+
+.traffic-group-row:hover .traffic-record-toggle,
+.traffic-group-row:focus-visible .traffic-record-toggle,
+.traffic-record-toggle:focus-visible {
+  color: var(--ink);
+}
+
+.traffic-group-row:hover .traffic-record-chevron,
+.traffic-group-row:focus-visible .traffic-record-chevron,
+.traffic-record-toggle:focus-visible .traffic-record-chevron {
+  border-color: rgba(29, 111, 103, 0.32);
+  background: rgba(220, 232, 227, 0.96);
+  color: var(--teal-dark);
+  transform: translateX(1px);
+}
+
+.traffic-group-row:hover .traffic-record-hint,
+.traffic-group-row:focus-visible .traffic-record-hint,
+.traffic-record-toggle:focus-visible .traffic-record-hint {
+  color: var(--teal-dark);
+}
+
 .traffic-group-row.is-open {
-  background: rgba(220, 232, 227, 0.32);
+  background: rgba(220, 232, 227, 0.34);
+  box-shadow: inset 3px 0 0 rgba(29, 111, 103, 0.5);
 }
 
 .traffic-record-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -2396,22 +2430,61 @@
   font: inherit;
   font-weight: 850;
   text-align: left;
+  cursor: pointer;
+}
+
+.traffic-record-chevron {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  border-radius: 7px;
+  background: rgba(255, 255, 251, 0.7);
+  color: var(--teal-dark);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, color 180ms ease;
+}
+
+.traffic-record-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.traffic-record-time {
+  color: var(--ink);
+  line-height: 1.15;
+}
+
+.traffic-record-hint {
+  color: rgba(24, 33, 31, 0.48);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 850;
+  line-height: 1.1;
+  text-transform: uppercase;
+  transition: color 180ms ease;
 }
 
 .traffic-record-toggle svg {
-  width: 15px;
-  height: 15px;
-  color: var(--teal-dark);
+  width: 14px;
+  height: 14px;
   transition: transform 180ms ease;
 }
 
-.traffic-record-toggle[aria-expanded="true"] svg {
+.traffic-record-toggle[aria-expanded="true"] .traffic-record-chevron {
+  background: rgba(29, 111, 103, 0.13);
+  border-color: rgba(29, 111, 103, 0.34);
+}
+
+.traffic-record-toggle[aria-expanded="true"] .traffic-record-chevron svg {
   transform: rotate(90deg);
 }
 
 .traffic-group-row td > small {
   display: block;
-  margin: 4px 0 0 22px;
+  margin: 5px 0 0 35px;
   color: rgba(24, 33, 31, 0.5);
   font-family: var(--mono);
   font-size: 0.66rem;

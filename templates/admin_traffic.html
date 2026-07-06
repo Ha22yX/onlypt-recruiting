@@ -156,11 +156,14 @@
             </thead>
             <tbody>
               {% for group in recent_records %}
-                <tr class="traffic-group-row" data-traffic-record-row="{{ group.id }}">
+                <tr class="traffic-group-row" data-traffic-record-row="{{ group.id }}" role="button" tabindex="0" aria-label="Expand visit details for {{ group.ip_label }}">
                   <td>
                     <button class="traffic-record-toggle" type="button" data-traffic-record-toggle="{{ group.id }}" aria-expanded="false">
-                      <i data-lucide="chevron-right"></i>
-                      <span>{{ group.last_time or group.first_time or '-' }}</span>
+                      <span class="traffic-record-chevron"><i data-lucide="chevron-right"></i></span>
+                      <span class="traffic-record-copy">
+                        <span class="traffic-record-time">{{ group.last_time or group.first_time or '-' }}</span>
+                        <span class="traffic-record-hint">View details</span>
+                      </span>
                     </button>
                     <small>{{ group.local_date }}</small>
                   </td>
@@ -211,8 +214,7 @@
 
 {% block extra_scripts %}
   <script>
-    document.querySelectorAll("[data-traffic-record-toggle]").forEach((button) => {
-      button.addEventListener("click", () => {
+    const toggleTrafficRecord = (button) => {
         const recordId = button.dataset.trafficRecordToggle;
         const detail = document.querySelector(`[data-traffic-record-detail="${recordId}"]`);
         const row = document.querySelector(`[data-traffic-record-row="${recordId}"]`);
@@ -233,6 +235,27 @@
           row?.classList.add("is-open");
           button.setAttribute("aria-expanded", "true");
         }
+    };
+
+    document.querySelectorAll("[data-traffic-record-toggle]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleTrafficRecord(button);
+      });
+    });
+
+    document.querySelectorAll("[data-traffic-record-row]").forEach((row) => {
+      row.addEventListener("click", () => {
+        const button = row.querySelector("[data-traffic-record-toggle]");
+        if (button) toggleTrafficRecord(button);
+      });
+      row.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        const button = row.querySelector("[data-traffic-record-toggle]");
+        if (button) toggleTrafficRecord(button);
       });
     });
     window.lucide?.createIcons();
