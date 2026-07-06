@@ -219,6 +219,210 @@ window.addEventListener("DOMContentLoaded", () => {
   updateProgress();
   window.addEventListener("scroll", updateProgress, { passive: true });
 
+  const initializeDynamicPageContent = () => {
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+
+    document.querySelectorAll("main > section").forEach((section, index) => {
+      section.classList.add("page-enter");
+      section.style.setProperty("--page-enter-delay", `${Math.min(index * 55, 220)}ms`);
+    });
+
+    document.querySelectorAll("main .reveal").forEach((element, index) => {
+      element.style.setProperty("--reveal-delay", `${Math.min(index * 35, 220)}ms`);
+      if (mobileLiteQuery.matches || prefersReducedMotion) {
+        element.classList.add("visible");
+      }
+    });
+
+    document.querySelectorAll("main > section.cta-panel").forEach((panel) => {
+      if (panel.dataset.dynamicPanelReady === "true") {
+        return;
+      }
+      panel.dataset.dynamicPanelReady = "true";
+      const activatePanel = () => panel.classList.add("is-interactive");
+      const deactivatePanel = () => {
+        if (!panel.matches(":focus-within")) {
+          panel.classList.remove("is-interactive");
+        }
+      };
+      panel.addEventListener("pointerenter", activatePanel);
+      panel.addEventListener("pointerleave", deactivatePanel);
+      panel.addEventListener("focusin", activatePanel);
+      panel.addEventListener("focusout", () => window.requestAnimationFrame(deactivatePanel));
+    });
+
+    const dynamicPracticeMap = document.querySelector("main .practice-map");
+    const dynamicPracticeSpotlight = dynamicPracticeMap?.querySelector(".practice-map-spotlight");
+    const dynamicPracticeNodes = dynamicPracticeMap
+      ? Array.from(dynamicPracticeMap.querySelectorAll(".practice-node-list span"))
+      : [];
+    if (dynamicPracticeMap && dynamicPracticeSpotlight && dynamicPracticeNodes.length && dynamicPracticeMap.dataset.dynamicReady !== "true") {
+      dynamicPracticeMap.dataset.dynamicReady = "true";
+      const numberElement = dynamicPracticeSpotlight.querySelector("small");
+      const titleElement = dynamicPracticeSpotlight.querySelector("strong");
+      const detailElement = dynamicPracticeSpotlight.querySelector("em");
+      const writePracticeSpotlight = (activeNode) => {
+        const activeNumber = activeNode.querySelector("small");
+        const activeTitle = activeNode.querySelector("strong");
+        const activeDetail = activeNode.querySelector("em");
+        if (numberElement) numberElement.textContent = activeNumber?.textContent?.trim() || "";
+        if (titleElement) titleElement.textContent = activeTitle?.textContent?.trim() || "";
+        if (detailElement) detailElement.textContent = activeDetail?.textContent?.trim() || "";
+      };
+      const setActivePractice = (index) => {
+        const nextIndex = (index + dynamicPracticeNodes.length) % dynamicPracticeNodes.length;
+        dynamicPracticeNodes.forEach((node, nodeIndex) => {
+          const isActive = nodeIndex === nextIndex;
+          node.classList.toggle("is-active", isActive);
+          node.setAttribute("aria-pressed", String(isActive));
+        });
+        dynamicPracticeMap.style.setProperty("--practice-active", String(nextIndex));
+        writePracticeSpotlight(dynamicPracticeNodes[nextIndex]);
+      };
+      dynamicPracticeNodes.forEach((node, index) => {
+        node.setAttribute("role", "button");
+        node.setAttribute("tabindex", "0");
+        node.addEventListener("click", () => setActivePractice(index));
+        node.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setActivePractice(index);
+          }
+        });
+      });
+      setActivePractice(0);
+    }
+
+    document.documentElement.classList.remove("page-loading", "pjax-loading");
+    document.documentElement.classList.add("page-ready", "page-entered");
+    window.requestAnimationFrame(() => {
+      document.querySelectorAll("main .reveal").forEach((element) => {
+        const rect = element.getBoundingClientRect();
+        if (rect.top < window.innerHeight * 0.96 && rect.bottom > 0) {
+          element.classList.add("visible");
+        }
+      });
+      updateProgress();
+    });
+  };
+
+  const updatePageShellFromDocument = (nextDocument) => {
+    const nextMain = nextDocument.querySelector("main");
+    const currentMain = document.querySelector("main");
+    if (!nextMain || !currentMain) {
+      return false;
+    }
+
+    document.title = nextDocument.title || document.title;
+
+    const nextBody = nextDocument.body;
+    if (nextBody) {
+      const nextFirstBlockStart = nextBody.style.getPropertyValue("--first-block-start");
+      if (nextFirstBlockStart) {
+        document.body.style.setProperty("--first-block-start", nextFirstBlockStart);
+      }
+      const nextBgImage = nextBody.style.getPropertyValue("--site-bg-image");
+      if (nextBgImage && nextBgImage !== document.body.style.getPropertyValue("--site-bg-image")) {
+        document.body.style.setProperty("--site-bg-image", nextBgImage);
+        window.onlyPTBackgroundSlideshow?.refresh?.();
+      }
+      document.body.classList.toggle("site-background-enabled", nextBody.classList.contains("site-background-enabled"));
+    }
+
+    const nextNav = nextDocument.querySelector(".site-nav");
+    const currentNav = document.querySelector(".site-nav");
+    if (nextNav && currentNav) {
+      currentNav.innerHTML = nextNav.innerHTML;
+      currentNav.querySelectorAll("a").forEach((link) => {
+        link.addEventListener("click", closeNav);
+      });
+    }
+
+    const nextHeaderCta = nextDocument.querySelector(".header-cta");
+    const currentHeaderCta = document.querySelector(".header-cta");
+    if (nextHeaderCta && currentHeaderCta) {
+      currentHeaderCta.replaceWith(nextHeaderCta);
+    }
+
+    currentMain.classList.add("is-pjax-leaving");
+    window.setTimeout(() => {
+      currentMain.innerHTML = nextMain.innerHTML;
+      currentMain.classList.remove("is-pjax-leaving");
+      currentMain.classList.add("is-pjax-entering");
+      initializeDynamicPageContent();
+      window.setTimeout(() => currentMain.classList.remove("is-pjax-entering"), 260);
+    }, prefersReducedMotion ? 0 : 120);
+
+    return true;
+  };
+
+  const shouldHandlePjax = (link, event) => {
+    if (!link || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return false;
+    }
+    if (link.target && link.target !== "_self") {
+      return false;
+    }
+    const url = new URL(link.href, window.location.href);
+    if (url.origin !== window.location.origin) {
+      return false;
+    }
+    if (url.hash && url.pathname === window.location.pathname && url.search === window.location.search) {
+      return false;
+    }
+    return !(
+      url.pathname.startsWith("/admin") ||
+      url.pathname.startsWith("/dev") ||
+      url.pathname.startsWith("/uploads") ||
+      url.pathname.startsWith("/static") ||
+      link.hasAttribute("download")
+    );
+  };
+
+  const navigatePjax = async (url, options = {}) => {
+    document.documentElement.classList.add("pjax-loading");
+    closeNav();
+    try {
+      const response = await fetch(url, {
+        headers: { "X-Requested-With": "fetch" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        window.location.href = url;
+        return;
+      }
+
+      const text = await response.text();
+      const nextDocument = new DOMParser().parseFromString(text, "text/html");
+      if (!updatePageShellFromDocument(nextDocument)) {
+        window.location.href = url;
+        return;
+      }
+
+      if (!options.replace) {
+        window.history.pushState({ pjax: true }, "", url);
+      }
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" });
+    } catch (_error) {
+      window.location.href = url;
+    }
+  };
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href]");
+    if (!shouldHandlePjax(link, event)) {
+      return;
+    }
+    event.preventDefault();
+    navigatePjax(link.href);
+  });
+
+  window.addEventListener("popstate", () => {
+    navigatePjax(window.location.href, { replace: true });
+  });
+
   const ambientShapes = document.querySelectorAll(".geo-shape");
   const randomBetween = (min, max) => Math.random() * (max - min) + min;
 

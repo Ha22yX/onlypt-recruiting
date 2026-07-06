@@ -7841,3 +7841,47 @@ main > .page-hero.page-hero > .story-copy:first-child .eyebrow:first-child {
     padding: 22px;
   }
 }
+
+/* Same-origin page swaps keep the global background mounted between pages. */
+main {
+  transition: opacity 180ms ease, transform 220ms ease, filter 220ms ease;
+}
+
+main.is-pjax-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(3px);
+}
+
+main.is-pjax-entering {
+  animation: pjax-main-enter 240ms ease both;
+}
+
+html.pjax-loading .scroll-progress {
+  opacity: 0.72;
+}
+
+@keyframes pjax-main-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main,
+  main.is-pjax-leaving,
+  main.is-pjax-entering {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
