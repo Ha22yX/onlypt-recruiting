@@ -2420,19 +2420,19 @@
 }
 
 .traffic-records-card {
-  height: min(74vh, 820px);
-  min-height: 560px;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
   contain: layout paint;
 }
 
 .traffic-table-wrap {
-  height: 100%;
+  height: auto;
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
 }
 
@@ -2581,22 +2581,21 @@
   overflow: hidden;
   opacity: 0;
   transform: translateY(-6px);
-  transition: max-height 280ms ease, opacity 200ms ease, transform 240ms ease, padding 240ms ease;
+  transition: max-height 360ms ease, opacity 220ms ease, transform 260ms ease, padding 260ms ease;
 }
 
 .traffic-group-detail-row.is-open .traffic-group-detail-shell {
-  max-height: 320px;
+  max-height: 1800px;
   padding: 0 0 14px;
   opacity: 1;
   transform: translateY(0);
 }
 
 .traffic-group-detail {
-  max-height: 260px;
   display: grid;
   gap: 6px;
   padding: 10px;
-  overflow: auto;
+  overflow: visible;
   border: 1px solid rgba(24, 33, 31, 0.08);
   border-radius: 8px;
   background: rgba(255, 255, 251, 0.68);
