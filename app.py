@@ -573,60 +573,132 @@ def mask_ip(ip_value: str) -> str:
     return f"{address.compressed[:12]}..."
 
 
+def traffic_event_local_date(event: dict[str, object]) -> str:
+    created_at = parse_iso_datetime(str(event.get("created_at", "")))
+    if created_at is None:
+        return "unknown"
+    return created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d")
+
+
+def traffic_location_label(event: dict[str, object]) -> str:
+    region = event.get("region") or {}
+    location = ", ".join(
+        part
+        for part in [
+            str(region.get("city", "")),
+            str(region.get("region", "")),
+            str(region.get("country", "")),
+        ]
+        if part
+    )
+    return location or "Unknown"
+
+
+def enrich_traffic_event(event: dict[str, object]) -> dict[str, object]:
+    created_at = parse_iso_datetime(str(event.get("created_at", "")))
+    item = dict(event)
+    item["local_time"] = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M") if created_at else "-"
+    item["location_label"] = traffic_location_label(event)
+    item["ip_label"] = mask_ip(str(event.get("ip", "")))
+    return item
+
+
+def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, object]]:
+    groups: dict[str, dict[str, object]] = {}
+    for event in events:
+        ip_value = str(event.get("ip", "") or "unknown")
+        local_date = traffic_event_local_date(event)
+        group_key = f"{ip_value}|{local_date}"
+        group = groups.setdefault(
+            group_key,
+            {
+                "id": hashlib.sha1(group_key.encode("utf-8", errors="ignore")).hexdigest()[:12],
+                "ip": ip_value,
+                "ip_label": mask_ip(ip_value),
+                "local_date": local_date,
+                "events": [],
+                "page_paths": [],
+                "event_count": 0,
+                "page_view_count": 0,
+                "form_submission_count": 0,
+                "first_time": "",
+                "last_time": "",
+                "location_label": traffic_location_label(event),
+                "device": event.get("device") or "Unknown",
+                "referrer": event.get("referrer") or "Direct",
+            },
+        )
+        enriched = enrich_traffic_event(event)
+        group_events = group["events"]
+        if isinstance(group_events, list):
+            group_events.append(enriched)
+
+        group["event_count"] = int(group.get("event_count", 0)) + 1
+        if event.get("type") == "page_view":
+            group["page_view_count"] = int(group.get("page_view_count", 0)) + 1
+            path = str(event.get("path") or "-")
+            page_paths = group["page_paths"]
+            if isinstance(page_paths, list) and path not in page_paths:
+                page_paths.append(path)
+        if event.get("type") == "form_submission":
+            group["form_submission_count"] = int(group.get("form_submission_count", 0)) + 1
+
+        created_at = parse_iso_datetime(str(event.get("created_at", "")))
+        if created_at is not None:
+            local_time = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+            if not group.get("first_time"):
+                group["first_time"] = local_time
+            group["last_time"] = local_time
+
+        if traffic_location_label(event) != "Unknown":
+            group["location_label"] = traffic_location_label(event)
+        if event.get("device"):
+            group["device"] = event.get("device")
+        if event.get("referrer"):
+            group["referrer"] = event.get("referrer")
+
+    grouped = list(groups.values())
+    grouped.sort(key=lambda item: str(item.get("last_time") or item.get("first_time") or ""), reverse=True)
+    for group in grouped:
+        events_list = group.get("events")
+        if isinstance(events_list, list):
+            events_list.sort(key=lambda item: str(item.get("created_at", "")), reverse=True)
+        page_paths = group.get("page_paths")
+        group["page_label"] = ", ".join(page_paths[:3]) if isinstance(page_paths, list) and page_paths else "-"
+        if isinstance(page_paths, list) and len(page_paths) > 3:
+            group["page_label"] = f"{group['page_label']} +{len(page_paths) - 3}"
+    return grouped
+
+
 def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
     events = iter_traffic_events(start, end)
     page_views = [event for event in events if event.get("type") == "page_view"]
     form_submissions = [event for event in events if event.get("type") == "form_submission"]
-    visitors = {str(event.get("visitor_id", "")) for event in events if event.get("visitor_id")}
-    page_visitors = {str(event.get("visitor_id", "")) for event in page_views if event.get("visitor_id")}
-    enriched_recent: list[dict[str, object]] = []
-    for event in reversed(events[-80:]):
-        created_at = parse_iso_datetime(str(event.get("created_at", "")))
-        region = event.get("region") or {}
-        location = ", ".join(
-            part
-            for part in [
-                str(region.get("city", "")),
-                str(region.get("region", "")),
-                str(region.get("country", "")),
-            ]
-            if part
-        )
-        item = dict(event)
-        item["local_time"] = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M") if created_at else "-"
-        item["location_label"] = location or "Unknown"
-        item["ip_label"] = mask_ip(str(event.get("ip", "")))
-        enriched_recent.append(item)
+    visit_groups = group_traffic_events(events)
+    page_visit_groups = [group for group in visit_groups if int(group.get("page_view_count", 0)) > 0]
 
     return {
         "start": start.isoformat(),
         "end": end.isoformat(),
         "events": events,
+        "visit_groups": visit_groups,
         "totals": {
             "page_views": len(page_views),
-            "unique_visitors": len(visitors),
-            "unique_page_visitors": len(page_visitors),
+            "unique_visitors": len(visit_groups),
+            "unique_page_visitors": len(page_visit_groups),
             "form_submissions": len(form_submissions),
-            "conversion_rate": round((len(form_submissions) / len(page_visitors) * 100), 1) if page_visitors else 0,
+            "conversion_rate": round((len(form_submissions) / len(page_visit_groups) * 100), 1) if page_visit_groups else 0,
         },
-        "pages": count_by(page_views, lambda event: event.get("path"), 12),
+        "pages": count_by(page_views, lambda event: event.get("path"), 60),
         "regions": count_by(
-            events,
-            lambda event: ", ".join(
-                part
-                for part in [
-                    (event.get("region") or {}).get("city", ""),
-                    (event.get("region") or {}).get("region", ""),
-                    (event.get("region") or {}).get("country", ""),
-                ]
-                if part
-            ),
-            12,
+            visit_groups,
+            lambda group: group.get("location_label", ""),
+            60,
         ),
-        "countries": count_by(events, lambda event: (event.get("region") or {}).get("country", ""), 10),
-        "devices": count_by(events, lambda event: event.get("device", ""), 5),
-        "referrers": count_by(events, lambda event: event.get("referrer") or "Direct", 10),
-        "recent": enriched_recent,
+        "countries": count_by(visit_groups, lambda group: group.get("location_label", ""), 60),
+        "devices": count_by(visit_groups, lambda group: group.get("device", ""), 20),
+        "referrers": count_by(visit_groups, lambda group: group.get("referrer") or "Direct", 60),
+        "recent_groups": visit_groups,
     }
 
 
@@ -1769,8 +1841,20 @@ def admin_traffic():
     period = request.args.get("period", "day")
     if period not in {"day", "week"}:
         period = "day"
+    try:
+        records_page = max(1, int(request.args.get("records_page", "1")))
+    except ValueError:
+        records_page = 1
     start, end = period_bounds(period)
     summary = summarize_traffic(start, end)
+    records_per_page = 20
+    recent_groups = summary.get("recent_groups", [])
+    total_records = len(recent_groups) if isinstance(recent_groups, list) else 0
+    total_pages = max(1, (total_records + records_per_page - 1) // records_per_page)
+    records_page = min(records_page, total_pages)
+    page_start = (records_page - 1) * records_per_page
+    page_end = page_start + records_per_page
+    paginated_records = recent_groups[page_start:page_end] if isinstance(recent_groups, list) else []
     report_config = traffic_report_config()
     return render_template(
         "admin_traffic.html",
@@ -1778,6 +1862,15 @@ def admin_traffic():
         period=period,
         period_label=traffic_period_label(start, end),
         summary=summary,
+        recent_records=paginated_records,
+        records_pagination={
+            "page": records_page,
+            "pages": total_pages,
+            "total": total_records,
+            "per_page": records_per_page,
+            "start": page_start + 1 if total_records else 0,
+            "end": min(page_end, total_records),
+        },
         report_config=report_config,
     )
 

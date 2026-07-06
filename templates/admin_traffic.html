@@ -135,16 +135,19 @@
 
       <section class="traffic-card traffic-records-card">
         <div class="traffic-card-head">
-          <h2>Recent records</h2>
+          <div>
+            <h2>Recent records</h2>
+            <small>{{ records_pagination.start }}-{{ records_pagination.end }} of {{ records_pagination.total }} grouped records</small>
+          </div>
           <i data-lucide="list-filter"></i>
         </div>
         <div class="traffic-table-wrap">
           <table class="traffic-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Event</th>
-                <th>Page</th>
+                <th>Visit</th>
+                <th>Events</th>
+                <th>Pages</th>
                 <th>Location</th>
                 <th>Device</th>
                 <th>Source</th>
@@ -152,15 +155,38 @@
               </tr>
             </thead>
             <tbody>
-              {% for event in summary.recent %}
-                <tr>
-                  <td>{{ event.local_time }}</td>
-                  <td><span class="traffic-event-pill">{{ event.type|replace('_', ' ') }}</span></td>
-                  <td>{{ event.path or '-' }}</td>
-                  <td>{{ event.location_label }}</td>
-                  <td>{{ event.device or '-' }}</td>
-                  <td>{{ event.referrer or 'Direct' }}</td>
-                  <td>{{ event.ip_label }}</td>
+              {% for group in recent_records %}
+                <tr class="traffic-group-row" data-traffic-record-row="{{ group.id }}">
+                  <td>
+                    <button class="traffic-record-toggle" type="button" data-traffic-record-toggle="{{ group.id }}" aria-expanded="false">
+                      <i data-lucide="chevron-right"></i>
+                      <span>{{ group.last_time or group.first_time or '-' }}</span>
+                    </button>
+                    <small>{{ group.local_date }}</small>
+                  </td>
+                  <td>
+                    <span class="traffic-event-pill">{{ group.event_count }} total</span>
+                    {% if group.form_submission_count %}<span class="traffic-event-pill important">{{ group.form_submission_count }} form</span>{% endif %}
+                  </td>
+                  <td>{{ group.page_label or '-' }}</td>
+                  <td>{{ group.location_label }}</td>
+                  <td>{{ group.device or '-' }}</td>
+                  <td>{{ group.referrer or 'Direct' }}</td>
+                  <td>{{ group.ip_label }}</td>
+                </tr>
+                <tr class="traffic-group-detail-row" data-traffic-record-detail="{{ group.id }}" hidden>
+                  <td colspan="7">
+                    <div class="traffic-group-detail">
+                      {% for event in group.events %}
+                        <div class="traffic-detail-item">
+                          <span>{{ event.local_time }}</span>
+                          <strong>{{ event.type|replace('_', ' ') }}</strong>
+                          <em>{{ event.path or '-' }}</em>
+                          <small>{{ event.referrer or 'Direct' }}</small>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </td>
                 </tr>
               {% else %}
                 <tr>
@@ -170,8 +196,45 @@
             </tbody>
           </table>
         </div>
+        {% if records_pagination.pages > 1 %}
+          <nav class="traffic-pagination" aria-label="Recent records pages">
+            <a class="{{ 'disabled' if records_pagination.page <= 1 else '' }}" href="{{ url_for('admin_traffic', period=period, records_page=records_pagination.page - 1) }}">Previous</a>
+            <span>Page {{ records_pagination.page }} of {{ records_pagination.pages }}</span>
+            <a class="{{ 'disabled' if records_pagination.page >= records_pagination.pages else '' }}" href="{{ url_for('admin_traffic', period=period, records_page=records_pagination.page + 1) }}">Next</a>
+          </nav>
+        {% endif %}
       </section>
     </div>
   </div>
 </section>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    document.querySelectorAll("[data-traffic-record-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const recordId = button.dataset.trafficRecordToggle;
+        const detail = document.querySelector(`[data-traffic-record-detail="${recordId}"]`);
+        const row = document.querySelector(`[data-traffic-record-row="${recordId}"]`);
+        const willOpen = detail?.hidden;
+
+        document.querySelectorAll("[data-traffic-record-detail]").forEach((item) => {
+          item.hidden = true;
+        });
+        document.querySelectorAll("[data-traffic-record-row]").forEach((item) => {
+          item.classList.remove("is-open");
+        });
+        document.querySelectorAll("[data-traffic-record-toggle]").forEach((item) => {
+          item.setAttribute("aria-expanded", "false");
+        });
+
+        if (detail && willOpen) {
+          detail.hidden = false;
+          row?.classList.add("is-open");
+          button.setAttribute("aria-expanded", "true");
+        }
+      });
+    });
+    window.lucide?.createIcons();
+  </script>
 {% endblock %}
