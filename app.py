@@ -60,6 +60,14 @@ GLOBAL_EMAIL_LIMIT = 2
 GLOBAL_EMAIL_WINDOW_SECONDS = 60
 MAX_EMAIL_QUEUE_ATTEMPTS = 6
 PUBLIC_TRAFFIC_ENDPOINTS = {"home", "employers", "therapists", "about", "contact"}
+INTERNAL_REFERRER_HOSTS = {
+    host.strip().lower()
+    for host in os.environ.get(
+        "ONLYPT_INTERNAL_HOSTS",
+        "onlypt.co,www.onlypt.co,onlypt.rosebeg.com,www.onlypt.rosebeg.com,onlyptrecruiting.com,www.onlyptrecruiting.com",
+    ).split(",")
+    if host.strip()
+}
 
 EDITABLE_PAGES = {
     "home": {"label": "Home", "endpoint": "home", "template": "index.html"},
@@ -594,12 +602,41 @@ def traffic_location_label(event: dict[str, object]) -> str:
     return location or "Unknown"
 
 
+def normalize_referrer_host(host: str) -> str:
+    host = host.lower().strip().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def traffic_referrer_info(referrer: object) -> dict[str, str]:
+    value = str(referrer or "").strip()
+    if not value:
+        return {"type": "direct", "label": "Direct", "ranking_label": ""}
+
+    parsed = urllib.parse.urlparse(value)
+    if not parsed.netloc and value.startswith("/"):
+        return {"type": "internal", "label": "Internal", "ranking_label": ""}
+
+    host = normalize_referrer_host(parsed.hostname or "")
+    internal_hosts = {normalize_referrer_host(item) for item in INTERNAL_REFERRER_HOSTS}
+    if not host:
+        return {"type": "direct", "label": "Direct", "ranking_label": ""}
+    if host in internal_hosts:
+        return {"type": "internal", "label": "Internal", "ranking_label": ""}
+    return {"type": "external", "label": host, "ranking_label": host}
+
+
 def enrich_traffic_event(event: dict[str, object]) -> dict[str, object]:
     created_at = parse_iso_datetime(str(event.get("created_at", "")))
+    referrer_info = traffic_referrer_info(event.get("referrer"))
     item = dict(event)
     item["local_time"] = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M") if created_at else "-"
     item["location_label"] = traffic_location_label(event)
     item["ip_label"] = mask_ip(str(event.get("ip", "")))
+    item["source_type"] = referrer_info["type"]
+    item["source_label"] = referrer_info["label"]
+    item["referrer_label"] = referrer_info["ranking_label"]
     return item
 
 
@@ -625,7 +662,10 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
                 "last_time": "",
                 "location_label": traffic_location_label(event),
                 "device": event.get("device") or "Unknown",
-                "referrer": event.get("referrer") or "Direct",
+                "source_type": "direct",
+                "source_label": "Direct",
+                "referrer_label": "",
+                "referrer": "",
             },
         )
         enriched = enrich_traffic_event(event)
@@ -654,8 +694,15 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
             group["location_label"] = traffic_location_label(event)
         if event.get("device"):
             group["device"] = event.get("device")
-        if event.get("referrer"):
-            group["referrer"] = event.get("referrer")
+        referrer_info = traffic_referrer_info(event.get("referrer"))
+        current_source_type = str(group.get("source_type", "direct"))
+        if referrer_info["type"] == "external" or (
+            referrer_info["type"] == "internal" and current_source_type == "direct"
+        ):
+            group["source_type"] = referrer_info["type"]
+            group["source_label"] = referrer_info["label"]
+            group["referrer_label"] = referrer_info["ranking_label"]
+            group["referrer"] = str(event.get("referrer") or "")
 
     grouped = list(groups.values())
     grouped.sort(key=lambda item: str(item.get("last_time") or item.get("first_time") or ""), reverse=True)
@@ -676,6 +723,19 @@ def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
     form_submissions = [event for event in events if event.get("type") == "form_submission"]
     visit_groups = group_traffic_events(events)
     page_visit_groups = [group for group in visit_groups if int(group.get("page_view_count", 0)) > 0]
+    external_referrer_groups = [
+        group for group in visit_groups if str(group.get("source_type", "")) == "external"
+    ]
+    source_counts = count_by(
+        visit_groups,
+        lambda group: {
+            "external": "External referrer",
+            "internal": "Internal navigation",
+            "direct": "Direct / unknown",
+        }.get(str(group.get("source_type", "direct")), "Direct / unknown"),
+        10,
+    )
+    views_per_visitor = round((len(page_views) / len(page_visit_groups)), 1) if page_visit_groups else 0
 
     return {
         "start": start.isoformat(),
@@ -688,6 +748,8 @@ def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
             "unique_page_visitors": len(page_visit_groups),
             "form_submissions": len(form_submissions),
             "conversion_rate": round((len(form_submissions) / len(page_visit_groups) * 100), 1) if page_visit_groups else 0,
+            "views_per_visitor": views_per_visitor,
+            "external_referrers": len(external_referrer_groups),
         },
         "pages": count_by(page_views, lambda event: event.get("path"), 60),
         "regions": count_by(
@@ -697,7 +759,8 @@ def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
         ),
         "countries": count_by(visit_groups, lambda group: group.get("location_label", ""), 60),
         "devices": count_by(visit_groups, lambda group: group.get("device", ""), 20),
-        "referrers": count_by(visit_groups, lambda group: group.get("referrer") or "Direct", 60),
+        "source_counts": source_counts,
+        "referrers": count_by(external_referrer_groups, lambda group: group.get("referrer_label", ""), 60),
         "recent_groups": visit_groups,
     }
 
@@ -731,36 +794,69 @@ def build_traffic_report(
     period_name = period_name or ("Weekly" if period == "week" else "Daily")
     period_label = period_label or traffic_period_label(start, end)
 
-    def lines_for_table(title: str, rows: list[dict[str, object]]) -> list[str]:
+    recent_groups = summary.get("recent_groups", [])[:8]
+    top_page = summary["pages"][0]["label"] if summary["pages"] else "No page views"
+    top_region = summary["regions"][0]["label"] if summary["regions"] else "No location data"
+    top_referrer = summary["referrers"][0]["label"] if summary["referrers"] else "No external referrers"
+
+    def lines_for_table(title: str, rows: list[dict[str, object]], empty: str = "No data") -> list[str]:
         output = [title]
         if not rows:
-            output.append("- No data")
+            output.append(f"- {empty}")
             return output
         output.extend(f"- {row['label']}: {row['count']}" for row in rows)
+        return output
+
+    def lines_for_recent_visits() -> list[str]:
+        output = ["Recent visit groups"]
+        if not recent_groups:
+            output.append("- No grouped visits")
+            return output
+        for group in recent_groups:
+            output.append(
+                "- "
+                f"{group.get('last_time') or group.get('first_time') or '-'} | "
+                f"{group.get('source_label') or 'Direct'} | "
+                f"{group.get('location_label') or 'Unknown'} | "
+                f"{group.get('event_count', 0)} events | "
+                f"{group.get('page_label') or '-'}"
+            )
         return output
 
     text_lines = [
         f"{period_name} onlyPT traffic report",
         period_label,
         "",
+        "Snapshot",
         f"Page views: {totals['page_views']}",
-        f"Unique visitors: {totals['unique_visitors']}",
+        f"Visit groups: {totals['unique_visitors']}",
         f"Form submissions: {totals['form_submissions']}",
         f"Conversion rate: {totals['conversion_rate']}%",
+        f"Page views per visit group: {totals['views_per_visitor']}",
+        f"External referrer groups: {totals['external_referrers']}",
         "",
-        *lines_for_table("Top pages", summary["pages"]),
+        "At a glance",
+        f"- Top page: {top_page}",
+        f"- Top location: {top_region}",
+        f"- Top external referrer: {top_referrer}",
         "",
-        *lines_for_table("Top regions", summary["regions"]),
+        *lines_for_table("Source mix", summary["source_counts"]),
+        "",
+        *lines_for_table("Top pages", summary["pages"][:10]),
+        "",
+        *lines_for_table("Top locations", summary["regions"][:10]),
         "",
         *lines_for_table("Devices", summary["devices"]),
         "",
-        *lines_for_table("Referrers", summary["referrers"]),
+        *lines_for_table("External referrers", summary["referrers"][:10], "No external referrers"),
+        "",
+        *lines_for_recent_visits(),
     ]
     text_body = "\n".join(text_lines)
 
-    def html_rows(rows: list[dict[str, object]]) -> str:
+    def html_rows(rows: list[dict[str, object]], empty: str = "No data") -> str:
         if not rows:
-            return '<tr><td colspan="2" style="padding:12px;color:#5f6d68;">No data</td></tr>'
+            return f'<tr><td colspan="2" style="padding:12px;color:#5f6d68;">{html.escape(empty)}</td></tr>'
         return "\n".join(
             f"""
             <tr>
@@ -771,13 +867,40 @@ def build_traffic_report(
             for row in rows
         )
 
-    def table_block(title: str, rows: list[dict[str, object]]) -> str:
+    def table_block(title: str, rows: list[dict[str, object]], note: str = "", empty: str = "No data") -> str:
         return f"""
-        <h2 style="margin:26px 0 10px;font-family:Arial,sans-serif;font-size:16px;line-height:1.3;color:#18211f;">{html.escape(title)}</h2>
+        <h2 style="margin:28px 0 4px;font-family:Arial,sans-serif;font-size:16px;line-height:1.3;color:#18211f;">{html.escape(title)}</h2>
+        {f'<p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#5f6d68;">{html.escape(note)}</p>' if note else ''}
         <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#fffffb;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
-          {html_rows(rows)}
+          {html_rows(rows, empty)}
         </table>
         """
+
+    def kpi_cell(label: str, value: object, note: str = "") -> str:
+        return f"""
+        <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;width:33.33%;">
+          <small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">{html.escape(label)}</small>
+          <strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;line-height:1;color:#18211f;">{html.escape(str(value))}</strong>
+          {f'<span style="display:block;margin-top:7px;color:#5f6d68;font-family:Arial,sans-serif;font-size:12px;line-height:1.35;">{html.escape(note)}</span>' if note else ''}
+        </td>
+        """
+
+    source_summary = ", ".join(f"{row['label']}: {row['count']}" for row in summary["source_counts"]) or "No source data"
+    recent_visit_rows = ""
+    if recent_groups:
+        recent_visit_rows = "\n".join(
+            f"""
+            <tr>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(group.get('last_time') or group.get('first_time') or '-'))}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('source_label') or 'Direct'))}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('location_label') or 'Unknown'))}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{html.escape(str(group.get('event_count', 0)))}</td>
+            </tr>
+            """
+            for group in recent_groups
+        )
+    else:
+        recent_visit_rows = '<tr><td colspan="4" style="padding:12px;color:#5f6d68;">No grouped visits</td></tr>'
 
     html_body = f"""<!doctype html>
 <html lang="en">
@@ -798,16 +921,43 @@ def build_traffic_report(
               <td style="padding:24px 30px 30px;">
                 <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
                   <tr>
-                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Page views</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['page_views']}</strong></td>
-                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Unique visitors</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['unique_visitors']}</strong></td>
-                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Form submissions</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['form_submissions']}</strong></td>
-                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Conversion</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['conversion_rate']}%</strong></td>
+                    {kpi_cell("Page views", totals["page_views"], "all public page loads")}
+                    {kpi_cell("Visit groups", totals["unique_visitors"], "same IP + day counted once")}
+                    {kpi_cell("Form submissions", totals["form_submissions"], "contact form completions")}
+                  </tr>
+                  <tr>
+                    {kpi_cell("Conversion", f"{totals['conversion_rate']}%", "forms / visit groups")}
+                    {kpi_cell("Views per group", totals["views_per_visitor"], "engagement depth")}
+                    {kpi_cell("External referrers", totals["external_referrers"], "external source groups")}
                   </tr>
                 </table>
-                {table_block("Top pages", summary["pages"])}
-                {table_block("Top regions", summary["regions"])}
-                {table_block("Devices", summary["devices"])}
-                {table_block("Referrers", summary["referrers"])}
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:22px;border-collapse:collapse;background:#f7f5ee;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
+                  <tr>
+                    <td style="padding:16px 18px;">
+                      <h2 style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:16px;color:#18211f;">At a glance</h2>
+                      <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Top page:</strong> {html.escape(str(top_page))}</p>
+                      <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Top location:</strong> {html.escape(str(top_region))}</p>
+                      <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Top external referrer:</strong> {html.escape(str(top_referrer))}</p>
+                      <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Source mix:</strong> {html.escape(source_summary)}</p>
+                    </td>
+                  </tr>
+                </table>
+                {table_block("Source mix", summary["source_counts"], "Direct and internal traffic are shown here, not in external referrer rankings.")}
+                {table_block("Top pages", summary["pages"][:10], "Ranked by page views.")}
+                {table_block("Top locations", summary["regions"][:10], "Same IP on the same day counts as one visit group per location.")}
+                {table_block("External referrers", summary["referrers"][:10], "Only external domains are ranked. Internal navigation and direct visits are excluded.", "No external referrers")}
+                {table_block("Devices", summary["devices"], "Visit groups by device type.")}
+                <h2 style="margin:28px 0 4px;font-family:Arial,sans-serif;font-size:16px;line-height:1.3;color:#18211f;">Recent visit groups</h2>
+                <p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#5f6d68;">Latest grouped activity. A group is one IP address on one local calendar day.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#fffffb;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
+                  <tr>
+                    <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Last seen</th>
+                    <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Source</th>
+                    <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Location</th>
+                    <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:right;text-transform:uppercase;">Events</th>
+                  </tr>
+                  {recent_visit_rows}
+                </table>
               </td>
             </tr>
           </table>

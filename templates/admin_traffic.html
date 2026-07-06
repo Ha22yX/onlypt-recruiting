@@ -120,14 +120,14 @@
 
         <section class="traffic-card">
           <div class="traffic-card-head">
-            <h2>Referrers</h2>
+            <h2>External referrers</h2>
             <i data-lucide="send"></i>
           </div>
           <div class="traffic-list compact">
             {% for row in summary.referrers %}
               <div><span>{{ row.label }}</span><strong>{{ row.count }}</strong></div>
             {% else %}
-              <p>No referrer data yet.</p>
+              <p>No external referrer data yet.</p>
             {% endfor %}
           </div>
         </section>
@@ -171,7 +171,7 @@
                   <td>{{ group.page_label or '-' }}</td>
                   <td>{{ group.location_label }}</td>
                   <td>{{ group.device or '-' }}</td>
-                  <td>{{ group.referrer or 'Direct' }}</td>
+                  <td>{{ group.source_label or 'Direct' }}</td>
                   <td>{{ group.ip_label }}</td>
                 </tr>
                 <tr class="traffic-group-detail-row" data-traffic-record-detail="{{ group.id }}" hidden>
@@ -182,7 +182,7 @@
                           <span>{{ event.local_time }}</span>
                           <strong>{{ event.type|replace('_', ' ') }}</strong>
                           <em>{{ event.path or '-' }}</em>
-                          <small>{{ event.referrer or 'Direct' }}</small>
+                          <small>{{ event.source_label or 'Direct' }}</small>
                         </div>
                       {% endfor %}
                     </div>
