@@ -59,6 +59,8 @@ EMAIL_SUBMISSION_WINDOW_SECONDS = 60 * 60
 GLOBAL_EMAIL_LIMIT = 2
 GLOBAL_EMAIL_WINDOW_SECONDS = 60
 MAX_EMAIL_QUEUE_ATTEMPTS = 6
+DEFAULT_TRAFFIC_REPORT_SEND_TIME = "01:00"
+TRAFFIC_REPORT_RECENT_LIMIT = 8
 PUBLIC_TRAFFIC_ENDPOINTS = {"home", "employers", "therapists", "about", "contact"}
 INTERNAL_REFERRER_HOSTS = {
     host.strip().lower()
@@ -131,6 +133,7 @@ CONTENT_PAGES = {
             cms_field("lead_email.enabled", "Send email lead notifications", "off", "toggle", "Notification target"),
             cms_field("traffic_report.daily_enabled", "Send daily traffic report", "off", "toggle", "Notification target"),
             cms_field("traffic_report.weekly_enabled", "Send weekly traffic report", "off", "toggle", "Notification target"),
+            cms_field("traffic_report.send_time", "Traffic report send time", DEFAULT_TRAFFIC_REPORT_SEND_TIME, "time", "Notification target"),
             cms_field("lead_email.from_email", "Sender email address", "", group="Sender identity"),
             cms_field("lead_email.from_name", "Sender display name", "onlyPT Recruiting", group="Sender identity"),
             cms_field("lead_email.smtp_host", "SMTP server", "smtppro.zoho.com", group="SMTP access"),
@@ -552,7 +555,7 @@ def period_bounds(period: str, reference: datetime | None = None) -> tuple[datet
     reference = reference.astimezone(SITE_TIMEZONE)
     day_start = reference.replace(hour=0, minute=0, second=0, microsecond=0)
     if period == "week":
-        start = day_start.replace(day=day_start.day) - timedelta(days=day_start.weekday())
+        start = day_start - timedelta(days=(day_start.weekday() + 1) % 7)
         return start.astimezone(timezone.utc), (start + timedelta(days=7)).astimezone(timezone.utc)
     return day_start.astimezone(timezone.utc), (day_start + timedelta(days=1)).astimezone(timezone.utc)
 
@@ -777,7 +780,7 @@ def traffic_report_subject(period: str, start: datetime, end: datetime) -> str:
     return f"{label} onlyPT traffic report - {traffic_period_label(start, end)}"
 
 
-def build_traffic_report(
+def build_legacy_traffic_report_document(
     period: str,
     reference: datetime | None = None,
     start: datetime | None = None,
@@ -975,6 +978,269 @@ def build_traffic_report(
     }
 
 
+def traffic_report_section_data(
+    period: str,
+    reference: datetime | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    period_name: str | None = None,
+    period_label: str | None = None,
+) -> dict[str, object]:
+    if start is None or end is None:
+        start, end = period_bounds(period, reference)
+    summary = summarize_traffic(start, end)
+    recent_groups = summary.get("recent_groups", [])
+    if not isinstance(recent_groups, list):
+        recent_groups = []
+    return {
+        "period": period,
+        "period_name": period_name or ("Weekly" if period == "week" else "Daily"),
+        "period_label": period_label or traffic_period_label(start, end),
+        "start": start,
+        "end": end,
+        "summary": summary,
+        "totals": summary["totals"],
+        "recent_groups": recent_groups[:TRAFFIC_REPORT_RECENT_LIMIT],
+        "recent_total": len(recent_groups),
+    }
+
+
+def traffic_report_rows(rows: list[dict[str, object]], empty: str = "No data") -> str:
+    if not rows:
+        return f'<tr><td colspan="2" style="padding:12px;color:#5f6d68;">{html.escape(empty)}</td></tr>'
+    return "\n".join(
+        f"""
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(row['label']))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{row['count']}</td>
+        </tr>
+        """
+        for row in rows
+    )
+
+
+def traffic_report_table(title: str, rows: list[dict[str, object]], note: str = "", empty: str = "No data") -> str:
+    return f"""
+    <h3 style="margin:24px 0 4px;font-family:Arial,sans-serif;font-size:15px;line-height:1.3;color:#18211f;">{html.escape(title)}</h3>
+    {f'<p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#5f6d68;">{html.escape(note)}</p>' if note else ''}
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#fffffb;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
+      {traffic_report_rows(rows, empty)}
+    </table>
+    """
+
+
+def traffic_report_kpi_cell(label: str, value: object, note: str = "") -> str:
+    return f"""
+    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;width:33.33%;">
+      <small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">{html.escape(label)}</small>
+      <strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;line-height:1;color:#18211f;">{html.escape(str(value))}</strong>
+      {f'<span style="display:block;margin-top:7px;color:#5f6d68;font-family:Arial,sans-serif;font-size:12px;line-height:1.35;">{html.escape(note)}</span>' if note else ''}
+    </td>
+    """
+
+
+def traffic_report_recent_rows(section: dict[str, object]) -> str:
+    recent_groups = section["recent_groups"]
+    if not recent_groups:
+        return '<tr><td colspan="4" style="padding:12px;color:#5f6d68;">No grouped visits</td></tr>'
+    return "\n".join(
+        f"""
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(group.get('last_time') or group.get('first_time') or '-'))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('source_label') or 'Direct'))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('location_label') or 'Unknown'))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{html.escape(str(group.get('event_count', 0)))}</td>
+        </tr>
+        """
+        for group in recent_groups
+    )
+
+
+def traffic_report_text_section(section: dict[str, object]) -> list[str]:
+    summary = section["summary"]
+    totals = section["totals"]
+    recent_groups = section["recent_groups"]
+    recent_total = int(section["recent_total"])
+    top_page = summary["pages"][0]["label"] if summary["pages"] else "No page views"
+    top_region = summary["regions"][0]["label"] if summary["regions"] else "No location data"
+    top_referrer = summary["referrers"][0]["label"] if summary["referrers"] else "No external referrers"
+
+    def lines_for_table(title: str, rows: list[dict[str, object]], empty: str = "No data") -> list[str]:
+        output = [title]
+        output.extend(f"- {row['label']}: {row['count']}" for row in rows) if rows else output.append(f"- {empty}")
+        return output
+
+    lines = [
+        "",
+        f"{section['period_name']} report",
+        str(section["period_label"]),
+        "",
+        "Snapshot",
+        f"Page views: {totals['page_views']}",
+        f"Visit groups: {totals['unique_visitors']}",
+        f"Form submissions: {totals['form_submissions']}",
+        f"Conversion rate: {totals['conversion_rate']}%",
+        f"Page views per visit group: {totals['views_per_visitor']}",
+        f"External referrer groups: {totals['external_referrers']}",
+        "",
+        "At a glance",
+        f"- Top page: {top_page}",
+        f"- Top location: {top_region}",
+        f"- Top external referrer: {top_referrer}",
+        "",
+        *lines_for_table("Source mix", summary["source_counts"]),
+        "",
+        *lines_for_table("Top pages", summary["pages"][:10]),
+        "",
+        *lines_for_table("Top locations", summary["regions"][:10]),
+        "",
+        *lines_for_table("Devices", summary["devices"]),
+        "",
+        *lines_for_table("External referrers", summary["referrers"][:10], "No external referrers"),
+        "",
+        f"Recent visit groups (showing {len(recent_groups)} of {recent_total})",
+    ]
+    if recent_groups:
+        for group in recent_groups:
+            lines.append(
+                "- "
+                f"{group.get('last_time') or group.get('first_time') or '-'} | "
+                f"{group.get('source_label') or 'Direct'} | "
+                f"{group.get('location_label') or 'Unknown'} | "
+                f"{group.get('event_count', 0)} events | "
+                f"{group.get('page_label') or '-'}"
+            )
+    else:
+        lines.append("- No grouped visits")
+    if recent_total > len(recent_groups):
+        lines.append(f"- {recent_total - len(recent_groups)} more grouped visits are available in Admin > Traffic.")
+    return lines
+
+
+def traffic_report_html_section(section: dict[str, object]) -> str:
+    summary = section["summary"]
+    totals = section["totals"]
+    recent_total = int(section["recent_total"])
+    recent_count = len(section["recent_groups"])
+    top_page = summary["pages"][0]["label"] if summary["pages"] else "No page views"
+    top_region = summary["regions"][0]["label"] if summary["regions"] else "No location data"
+    top_referrer = summary["referrers"][0]["label"] if summary["referrers"] else "No external referrers"
+    source_summary = ", ".join(f"{row['label']}: {row['count']}" for row in summary["source_counts"]) or "No source data"
+    recent_note = (
+        f"Showing the latest {recent_count} of {recent_total}; open Admin > Traffic for the full list."
+        if recent_total > recent_count
+        else f"Showing {recent_count} of {recent_total}."
+    )
+    return f"""
+      <section style="padding:26px 30px 30px;border-top:1px solid #dce8e3;">
+        <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#1d6f67;">{html.escape(str(section['period_name']))} report</p>
+        <h2 style="margin:0 0 18px;font-family:Georgia,serif;font-size:30px;line-height:1.08;color:#18211f;">{html.escape(str(section['period_label']))}</h2>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+          <tr>
+            {traffic_report_kpi_cell("Page views", totals["page_views"], "all public page loads")}
+            {traffic_report_kpi_cell("Visit groups", totals["unique_visitors"], "same IP + day counted once")}
+            {traffic_report_kpi_cell("Form submissions", totals["form_submissions"], "contact form completions")}
+          </tr>
+          <tr>
+            {traffic_report_kpi_cell("Conversion", f"{totals['conversion_rate']}%", "forms / visit groups")}
+            {traffic_report_kpi_cell("Views per group", totals["views_per_visitor"], "engagement depth")}
+            {traffic_report_kpi_cell("External referrers", totals["external_referrers"], "external source groups")}
+          </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:22px;border-collapse:collapse;background:#f7f5ee;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="padding:16px 18px;">
+              <h3 style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:16px;color:#18211f;">At a glance</h3>
+              <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Top page:</strong> {html.escape(str(top_page))}</p>
+              <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Top location:</strong> {html.escape(str(top_region))}</p>
+              <p style="margin:0 0 8px;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Top external referrer:</strong> {html.escape(str(top_referrer))}</p>
+              <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#5f6d68;"><strong style="color:#18211f;">Source mix:</strong> {html.escape(source_summary)}</p>
+            </td>
+          </tr>
+        </table>
+        {traffic_report_table("Source mix", summary["source_counts"], "Direct and internal traffic are shown here, not in external referrer rankings.")}
+        {traffic_report_table("Top pages", summary["pages"][:10], "Ranked by page views.")}
+        {traffic_report_table("Top locations", summary["regions"][:10], "Same IP on the same day counts as one visit group per location.")}
+        {traffic_report_table("External referrers", summary["referrers"][:10], "Only external domains are ranked. Internal navigation and direct visits are excluded.", "No external referrers")}
+        {traffic_report_table("Devices", summary["devices"], "Visit groups by device type.")}
+        <h3 style="margin:24px 0 4px;font-family:Arial,sans-serif;font-size:15px;line-height:1.3;color:#18211f;">Recent visit groups</h3>
+        <p style="margin:0 0 10px;font-family:Arial,sans-serif;font-size:13px;line-height:1.45;color:#5f6d68;">Latest grouped activity. A group is one IP address on one local calendar day. {html.escape(recent_note)}</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#fffffb;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
+          <tr>
+            <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Last seen</th>
+            <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Source</th>
+            <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Location</th>
+            <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:right;text-transform:uppercase;">Events</th>
+          </tr>
+          {traffic_report_recent_rows(section)}
+        </table>
+      </section>
+    """
+
+
+def build_combined_traffic_report(sections: list[dict[str, object]], subject: str | None = None) -> dict[str, str]:
+    primary = sections[0]
+    primary_start = primary["start"]
+    primary_end = primary["end"]
+    if not isinstance(primary_start, datetime) or not isinstance(primary_end, datetime):
+        raise ValueError("Traffic report sections require datetime bounds.")
+    heading_name = " + ".join(str(section["period_name"]) for section in sections)
+    heading_label = " / ".join(str(section["period_label"]) for section in sections)
+    subject = subject or (
+        traffic_report_subject(str(primary["period"]), primary_start, primary_end)
+        if len(sections) == 1
+        else f"{heading_name} onlyPT traffic report - {traffic_period_label(primary_start, primary_end)}"
+    )
+    text_lines = [f"{heading_name} onlyPT traffic report", heading_label]
+    for section in sections:
+        text_lines.extend(traffic_report_text_section(section))
+    html_sections = "\n".join(traffic_report_html_section(section) for section in sections)
+    html_body = f"""<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body style="margin:0;padding:0;background:#f7f5ee;color:#18211f;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f7f5ee;border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:760px;background:#fffffb;border:1px solid #dce8e3;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 30px;background:#fffffb;border-bottom:1px solid #dce8e3;">
+                <div style="font-family:Georgia,serif;font-size:30px;font-weight:700;color:#18211f;">onlyPT</div>
+                <p style="margin:10px 0 0;font-family:Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#1d6f67;">{html.escape(heading_name)} traffic report</p>
+                <h1 style="margin:18px 0 0;font-family:Georgia,serif;font-size:34px;line-height:1.05;color:#18211f;">{html.escape(heading_label)}</h1>
+              </td>
+            </tr>
+            <tr>
+              <td>{html_sections}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+    return {
+        "subject": subject,
+        "text": "\n".join(text_lines),
+        "html": html_body,
+        "start": primary_start.isoformat(),
+        "end": primary_end.isoformat(),
+    }
+
+
+def build_traffic_report(
+    period: str,
+    reference: datetime | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    period_name: str | None = None,
+    period_label: str | None = None,
+    subject: str | None = None,
+) -> dict[str, str]:
+    section = traffic_report_section_data(period, reference, start, end, period_name, period_label)
+    return build_combined_traffic_report([section], subject or traffic_report_subject(period, section["start"], section["end"]))
+
+
 def send_traffic_report(period: str, reference: datetime | None = None) -> bool:
     config = traffic_report_config()
     if period == "day" and config["daily_enabled"] != "on":
@@ -985,28 +1251,66 @@ def send_traffic_report(period: str, reference: datetime | None = None) -> bool:
     return send_smtp_email(report["subject"], report["text"], report["html"], config["to"], require_enabled=False)
 
 
+def parse_traffic_report_send_time(value: str) -> tuple[int, int]:
+    try:
+        hour_text, minute_text = value.split(":", 1)
+        hour = int(hour_text)
+        minute = int(minute_text)
+    except (AttributeError, ValueError):
+        return (1, 0)
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return (1, 0)
+    return (hour, minute)
+
+
+def traffic_report_time_reached(reference: datetime, configured_time: str) -> bool:
+    hour, minute = parse_traffic_report_send_time(configured_time)
+    return (reference.hour, reference.minute) >= (hour, minute)
+
+
+def send_combined_scheduled_traffic_report(sections: list[dict[str, object]], to_email: str) -> bool:
+    if not sections:
+        return False
+    report = build_combined_traffic_report(sections)
+    return send_smtp_email(report["subject"], report["text"], report["html"], to_email, require_enabled=False)
+
+
 def process_scheduled_traffic_reports(reference: datetime | None = None) -> int:
     reference = reference or datetime.now(timezone.utc)
     local_reference = reference.astimezone(SITE_TIMEZONE)
+    config = traffic_report_config()
     state = load_json_file(TRAFFIC_REPORT_STATE_FILE, {})
     sent_count = 0
+
+    if not traffic_report_time_reached(local_reference, config["send_time"]):
+        return 0
 
     yesterday = reference - timedelta(days=1)
     daily_start, _daily_end = period_bounds("day", yesterday)
     daily_key = daily_start.strftime("%Y-%m-%d")
-    if state.get("daily_last_sent") != daily_key and local_reference.hour >= 1:
-        if send_traffic_report("day", yesterday):
-            state["daily_last_sent"] = daily_key
-            sent_count += 1
+    daily_due = config["daily_enabled"] == "on" and state.get("daily_last_sent") != daily_key
 
-    if local_reference.weekday() == 0 and local_reference.hour >= 2:
-        previous_week = reference - timedelta(days=7)
-        weekly_start, _weekly_end = period_bounds("week", previous_week)
-        weekly_key = weekly_start.strftime("%Y-%m-%d")
-        if state.get("weekly_last_sent") != weekly_key:
-            if send_traffic_report("week", previous_week):
-                state["weekly_last_sent"] = weekly_key
-                sent_count += 1
+    weekly_reference = reference - timedelta(days=1)
+    weekly_start, _weekly_end = period_bounds("week", weekly_reference)
+    weekly_key = weekly_start.strftime("%Y-%m-%d")
+    weekly_due = (
+        config["weekly_enabled"] == "on"
+        and local_reference.weekday() == 6
+        and state.get("weekly_last_sent") != weekly_key
+    )
+
+    report_sections: list[dict[str, object]] = []
+    if daily_due:
+        report_sections.append(traffic_report_section_data("day", yesterday))
+    if weekly_due:
+        report_sections.append(traffic_report_section_data("week", weekly_reference))
+
+    if report_sections and send_combined_scheduled_traffic_report(report_sections, config["to"]):
+        if daily_due:
+            state["daily_last_sent"] = daily_key
+        if weekly_due:
+            state["weekly_last_sent"] = weekly_key
+        sent_count = 1
 
     try:
         write_json_file(TRAFFIC_REPORT_STATE_FILE, state)
@@ -1340,6 +1644,8 @@ def traffic_report_config() -> dict[str, str]:
     return {
         "daily_enabled": str(email_values.get("traffic_report.daily_enabled", "off")).strip().lower(),
         "weekly_enabled": str(email_values.get("traffic_report.weekly_enabled", "off")).strip().lower(),
+        "send_time": str(email_values.get("traffic_report.send_time", DEFAULT_TRAFFIC_REPORT_SEND_TIME)).strip()
+        or DEFAULT_TRAFFIC_REPORT_SEND_TIME,
         "to": str(email_values.get("lead_email.to", "")).strip(),
     }
 

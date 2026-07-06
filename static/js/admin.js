@@ -683,7 +683,8 @@
       "lead_email.to": "Primary destination for every contact form notification. Use one or more admin emails separated by commas.",
       "lead_email.enabled": "Keep this on when contact form submissions should trigger email alerts.",
       "traffic_report.daily_enabled": "Sends the previous day's traffic report after the day closes.",
-      "traffic_report.weekly_enabled": "Sends the previous week's traffic report every Monday.",
+      "traffic_report.weekly_enabled": "Adds the previous Sunday-Saturday weekly report to Sunday's daily report.",
+      "traffic_report.send_time": "New York time. Reports are checked by the minute and sent after this time.",
       "lead_email.from_email": "Use the Zoho mailbox address so SPF/DKIM alignment stays clean.",
       "lead_email.from_name": "This is the display name admins see in their inbox.",
       "lead_email.smtp_host": "Rarely changes after setup. Zoho usually uses smtppro.zoho.com.",
@@ -784,6 +785,8 @@
       `;
     } else if (field.type === "password") {
       control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="password" autocomplete="new-password" value="${escapeHtml(value)}">`;
+    } else if (field.type === "time") {
+      control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="time" value="${escapeHtml(value || "01:00")}">`;
     } else {
       control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="text" value="${escapeHtml(value)}">`;
     }
