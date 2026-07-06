@@ -2,93 +2,86 @@
 
 [English](README.md) | [线上示例](https://onlypt.rosebeg.com/)
 
-onlyPT Recruiting 是一个可复用的 Flask 官网系统。当前内容是为 Physical Therapy 招聘场景定制的，但项目本身并不局限于 onlyPT。所有同类型需求的网站都可以基于这个项目快速搭建：精品服务型官网、招聘/咨询业务官网、垂直行业获客页、带后台内容编辑和线索管理的小型商业网站。
+onlyPT Recruiting 是一个可复用的 Flask 网站系统，适用于聚焦招聘、咨询、专业服务和垂直获客类网站。当前公开内容是为 Physical Therapy 招聘业务编写的，但代码结构有意设计成可复用形态，因此同一个项目也可以服务其他具备类似需求的服务型业务：精致的公开官网、可编辑的营销文案、线索捕获、后台审核、邮件通知和轻量部署。
 
 ![onlyPT Recruiting 首页预览](static/img/readme-preview.png)
 
-## 项目定位
+## 这个项目是什么
 
-这不是一个简单的静态落地页，而是一个带轻量 CMS、线索收集、邮件通知和后台管理能力的业务官网项目。
-
-它适合这些场景：
+这不只是一个静态落地页。它是一个带小型 CMS 的业务官网，可以复用于很多相似场景：
 
 - 招聘机构收集雇主和候选人咨询。
-- 医疗、法律、金融、教育、B2B 服务公司的品牌官网。
-- 顾问、咨询师、精品工作室、垂直服务商的获客网站。
-- 需要联系表单、线索保存、后台查看、邮件提醒的网站。
-- 希望不接入大型 CMS，但又能让运营人员编辑页面文案的网站。
+- 医疗、法律、金融、教育或 B2B 服务公司需要一个高质感营销网站。
+- 顾问和精品服务商希望编辑页面内容，但不想引入大型 CMS。
+- 线索获客网站需要保存、查看并通过邮件发送联系表单提交。
+- 单品牌或单服务网站需要在多个页面之间保持一致的视觉设计。
 
-默认文案和页面命名是 onlyPT 招聘业务，但绝大多数前台文字都可以在后台改掉。因此，这个仓库可以作为同类服务型网站的通用基础项目。
+默认文案、导航和标签是为 `onlyPT` 编写的，但几乎所有可见文字都可以在后台编辑器中修改。
 
 ## 线上示例
 
-示例站点：
+生产示例站点位于 [https://onlypt.rosebeg.com/](https://onlypt.rosebeg.com/)。
 
-```text
-https://onlypt.rosebeg.com/
-```
+可以用它预览：
 
-可以用它查看：
-
-- 首页、雇主页、治疗师页、关于页、联系页。
+- 公开营销页面。
 - 桌面端和移动端响应式布局。
-- 全站共用背景和页面切换体验。
-- 联系表单提交后的弹窗反馈。
+- 持久化全站背景体验。
+- 联系表单流程和动画反馈弹窗。
 - 项目的整体视觉方向。
 
 ## 核心功能
 
-- Home、Employers、Therapists、About、Contact 公共页面。
-- 后台内容编辑器，可维护页面文案、导航、页脚、SEO 描述和联系页文字。
-- 后台实时预览 iframe。
-- 后台上传和管理全站背景图。
-- 后台上传和管理浏览器标签页图标 favicon。
-- 后台滑块调整每个页面第一个板块的起始高度。
-- 联系表单提交成功/失败弹窗动画反馈。
-- 表单线索保存到 `instance/leads.csv`。
-- 后台线索收件箱 `/admin/leads`。
-- 每条线索支持状态、下一步、备注和更新时间。
-- 支持 SMTP 邮件提醒，目前主设计是通过 Zoho SMTP 或其他 SMTP 服务发送。
-- 邮件发送队列，避免短时间触发 SMTP 频率限制。
-- 联系表单提交限流：
-  - 同一 IP：10 分钟最多 3 次。
-  - 同一邮箱：1 小时最多 5 次。
-  - 全站邮件发送：每分钟最多 2 封，超过的邮件进入队列。
-- 可选 Twilio WhatsApp 线索提醒。
-- 站内页面切换时保留全站背景，减少整页刷新带来的割裂感。
-- 运行时内容、上传文件和线索数据全部放在 `instance/`，不进入 Git。
+- Home、Employers、Therapists、About 和 Contact 公共页面。
+- 后台内容编辑器，可编辑页面文案、导航文字、页脚文字、元信息和联系页消息。
+- 编辑内容时可通过后台 iframe 实时预览。
+- 可编辑全站背景图。
+- 可编辑 favicon / 浏览器标签页图标。
+- 可从后台调整首个页面区块的垂直偏移。
+- 联系表单带成功/错误动画反馈弹窗。
+- 线索保存到 `instance/leads.csv`。
+- 后台线索收件箱位于 `/admin/leads`。
+- 每条线索支持跟进状态、下一步、备注和时间戳。
+- 通过 Zoho 或其他已配置 SMTP 服务发送线索邮件通知。
+- 带全站发送频率控制的邮件通知队列。
+- 联系表单提交限制：
+  - 同一 IP：10 分钟最多 3 次提交。
+  - 同一邮箱地址：1 小时最多 5 次提交。
+  - 全站邮件发送：每分钟最多 2 封，超出部分进入队列。
+- 可选 Twilio WhatsApp 线索通知。
+- 同源站内导航会保持共享背景不重新加载。
+- 运行时上传文件和内容覆盖保存在 `instance/`，不进入 Git。
 
-## 为什么适合复用
+## 复用于其他网站
 
-很多服务型网站的结构都很接近：
+这个项目适合任何具备相同基本结构的网站：
 
-1. 一个品牌首页。
-2. 面向不同受众的服务页面。
-3. 关于页或信任背书页。
-4. 联系/咨询表单。
-5. 后台能改文案。
-6. 表单提交后能通知负责人。
-7. 后台能查看线索和跟进状态。
+1. 一个包含 4-6 个核心页面的公开营销网站。
+2. 一个联系表单或线索表单。
+3. 一个用于内容编辑和线索查看的私有后台。
+4. 邮件通知发送能力。
+5. 一套一致的品牌视觉系统。
 
-onlyPT Recruiting 已经把这些通用能力做好了。要换成另一个业务，通常只需要：
+要适配另一个业务：
 
-1. 在后台修改品牌名、导航、页面文案和页脚。
-2. 上传新的背景图和 favicon。
-3. 配置新的 SMTP 收件人和发件账号。
-4. 必要时微调页面模板中的区块内容。
+1. 在后台内容编辑器中修改公开文案。
+2. 在 `General` 中替换背景图和 favicon。
+3. 更新导航标签、页脚标签、元信息和联系方式文字。
+4. 在 `Email Notifications` 中配置 SMTP 通知设置。
+5. 只有当新业务需要不同页面结构，而不只是不同文字时，才更新模板。
 
-如果只是同类型的服务获客网站，大部分情况下不用重写后端。
+对于大多数同类型服务网站，不需要重写应用。后台 CMS 字段和模板已经足够完成品牌和内容调整。
 
 ## 技术栈
 
 - Python + Flask。
 - Jinja 模板。
 - 原生 CSS 和 JavaScript。
-- CSV / JSON 文件存储。
-- SMTP 邮件通知。
-- 可选 Twilio WhatsApp 通知。
+- `instance/` 下的 CSV/JSON 文件存储。
+- 使用 Python `smtplib` 发送 SMTP 邮件通知。
+- 可选 Twilio WhatsApp API。
 
-项目不依赖数据库，适合 VPS、宝塔面板、普通 Linux 服务器、PaaS 或轻量云服务器部署。
+项目不要求数据库。这让它很容易部署到 VPS、PaaS 或基于面板的 Linux 服务器。
 
 ## 本地开发
 
@@ -99,7 +92,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-启动后打开：
+打开：
 
 ```text
 http://127.0.0.1:5000
@@ -107,15 +100,15 @@ http://127.0.0.1:5000
 
 ## 环境变量
 
-本地开发可以不配置环境变量，但生产环境建议设置安全值。
+应用在本地不配置环境变量也能运行，但生产环境应该设置安全值。
 
 ```text
-SECRET_KEY=替换为足够长的随机密钥
+SECRET_KEY=replace-with-a-long-random-secret
 ONLYPT_ADMIN_USERNAME=admin
-ONLYPT_ADMIN_PASSWORD=替换为强密码
+ONLYPT_ADMIN_PASSWORD=replace-with-a-strong-password
 ```
 
-可选 WhatsApp 通知：
+可选 WhatsApp 通知变量：
 
 ```text
 TWILIO_ACCOUNT_SID=...
@@ -124,140 +117,129 @@ TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 TWILIO_WHATSAPP_TO=whatsapp:+15551234567
 ```
 
-## 后台入口
+## 后台面板
 
-后台登录：
+打开：
 
 ```text
 /admin/login
 ```
 
-登录后常用页面：
+登录后：
 
-- `/admin/content/home`：编辑页面内容。
-- `/admin/leads`：查看联系表单线索。
-- `General -> Background`：管理全站背景图。
-- `General -> Page Tab`：管理浏览器标签页图标。
-- `General -> Layout`：调整首屏板块起始高度。
-- `Email Notifications`：配置邮件通知。
+- `/admin/content/home` 编辑站点内容。
+- `/admin/leads` 查看提交的线索。
+- `General -> Background` 管理全站背景。
+- `General -> Page Tab` 管理 favicon。
+- `General -> Layout` 控制首个页面区块的起始偏移。
+- `Email Notifications` 管理 SMTP 设置。
 
-默认开发账号密码写在 `app.py` 中，但生产环境必须通过环境变量覆盖。
+默认开发凭据定义在 `app.py` 中，但生产环境应该通过环境变量覆盖。
 
 ## 邮件通知
 
-联系表单提交后，应用会先保存线索，再尝试发送邮件通知。
+联系表单提交会先保存，然后尝试发送通知。
 
-邮件配置在后台 `Email Notifications` 中维护：
+邮件设置在后台中管理：
 
-- 是否开启邮件提醒。
-- 收件人邮箱。
-- 发件人邮箱。
-- 发件人显示名称。
-- SMTP 主机。
-- SMTP 端口。
-- SSL / TLS 模式。
-- SMTP 用户名和密码。
+- 通知收件人。
+- 开启/关闭邮件通知。
+- 发件邮箱和发件显示名称。
+- SMTP 主机、端口、安全模式、用户名和密码。
 
-当前生产环境使用 Zoho SMTP。只要其他邮件服务商支持 SMTP，也可以切换成其他服务商。
+当前生产配置使用 Zoho SMTP。其他支持认证 SMTP 的服务商也可以使用。
 
-### 邮件队列和频率控制
+### 频率控制和队列
 
-为避免再次触发 SMTP 服务商的频率限制，项目内置了邮件发送节流：
+为了避免 SMTP 频率限制：
 
-- 全站最多每分钟发送 2 封通知邮件。
-- 超出的邮件会写入 `instance/email_queue.json`。
-- 队列任务应每分钟执行一次 `process_email_queue()`。
-- 队列邮件失败后会延迟重试，超过最大次数后标记失败并写日志。
+- 站点每分钟最多发送 2 封通知邮件。
+- 额外通知会写入 `instance/email_queue.json`。
+- cron 或其他定时 worker 应该每分钟调用一次 `process_email_queue()`。
+- 队列中发送失败的消息会按退避策略重试，并在多次失败后标记为失败。
 
-示例 cron：
+示例 cron 命令：
 
 ```cron
 * * * * * cd /path/to/project && flock -n /tmp/onlypt-email-queue.lock /path/to/venv/bin/python -c "from app import process_email_queue; process_email_queue()" >> /path/to/instance/email_queue_cron.log 2>&1
 ```
 
-## 联系表单限流
+## 联系表单限制
 
-为了防止恶意提交或测试时刷爆 SMTP，后端有限流规则：
+联系表单包含服务端限制：
 
 - 同一 IP：10 分钟最多 3 次提交。
 - 同一邮箱：1 小时最多 5 次提交。
 
-超过限制时，用户会看到错误弹窗，系统不会保存重复线索，也不会发送邮件。
+当访问者超过限制时，站点会显示动画错误弹窗，并且不会保存另一条重复线索。
 
 ## 运行时数据
 
-这些文件都在 `instance/` 目录中，不应该提交到 Git：
+运行时文件存储在 `instance/` 中，不应提交：
 
 ```text
-instance/content_overrides.json    后台 CMS 内容覆盖
-instance/leads.csv                 联系表单线索
+instance/content_overrides.json    CMS 内容覆盖
+instance/leads.csv                 联系表单提交
 instance/lead_threads.json         线索状态和备注
-instance/submission_limits.json    表单提交限流状态
+instance/submission_limits.json    联系表单提交频率状态
 instance/email_rate.json           邮件发送频率状态
-instance/email_queue.json          邮件队列
-instance/notification_errors.log   邮件 / WhatsApp 错误日志
+instance/email_queue.json          排队中的通知邮件
+instance/notification_errors.log   邮件/Twilio 发送错误
 instance/uploads/                  背景图和 favicon 上传文件
 ```
 
 ## 项目结构
 
 ```text
-app.py                 Flask 应用、路由、CMS、线索、邮件队列
-templates/            前台页面和后台模板
-static/css/           前台和后台样式
-static/js/            前台交互和后台编辑器逻辑
+app.py                 Flask 应用、路由、CMS 辅助函数、线索逻辑、邮件队列
+templates/            公开页面和后台模板
+static/css/           公开页面和后台样式
+static/js/            公开导航/交互和后台编辑器逻辑
 static/img/           静态图片资源
-instance/             运行时数据、上传文件、内容覆盖、线索
+instance/             运行时数据、上传、内容覆盖、线索
 requirements.txt      Python 依赖
 ```
 
-## 部署建议
+## 部署说明
 
 推荐生产部署方式：
 
-1. 使用 Nginx 或其他反向代理。
-2. 使用 Gunicorn 或其他 WSGI 服务运行 Flask。
-3. 把 `instance/` 放在持久化共享目录。
-4. 源码按 release 方式部署。
-5. 用环境变量设置强后台密码。
-6. 在后台配置 SMTP。
-7. 设置每分钟执行一次邮件队列任务。
+1. 运行在 Nginx 或其他反向代理后面。
+2. 使用 Gunicorn 或其他 WSGI 服务器运行 Flask。
+3. 将 `instance/` 保存在共享持久化目录中。
+4. 以 release 方式部署源代码。
+5. 通过环境变量设置强后台凭据。
+6. 在后台面板中配置 SMTP。
+7. 为 `process_email_queue()` 添加定时队列 worker。
 8. 定期备份 `instance/`。
 
-不要提交这些内容：
+不要提交：
 
 - `instance/`
 - `.env`
 - 虚拟环境
-- 部署压缩包
-- 用户上传文件
+- 部署归档文件
+- 用户上传资源
 
 ## 定制指南
 
-通常不需要改代码的内容：
+大部分修改不需要改代码：
 
-- 品牌名和副标题。
-- 导航和页脚文字。
-- 各页面文案。
-- 全站背景图。
-- favicon。
-- 联系方式和表单提示文字。
-- 邮件通知配置。
-- 首屏板块起始高度。
+- 品牌名和副标题：Admin -> General。
+- 导航和页脚标签：Admin -> General。
+- 页面文案：Admin -> Home / Employers / Therapists / About / Contact。
+- 背景图：Admin -> General -> Background。
+- Favicon：Admin -> General -> Page Tab。
+- 联系通知邮箱：Admin -> Email Notifications。
 
-可能需要改代码的情况：
+只有这些情况通常需要改代码：
 
-- 新增页面。
-- 改联系表单字段。
-- 新增复杂线索流程。
-- 接入 CRM。
-- 改成数据库存储。
-- 增加支付、会员、预约等业务功能。
-
-## 维护说明
-
-这个项目适合持续作为多个同类型服务网站的基础版本。后续如果要复用到新业务，建议保留通用后端能力，只替换文案、图片、SMTP 配置和必要模板区块，这样维护成本最低。
+- 需要新增页面区块。
+- 想要不同的表单字段。
+- 需要不同的线索工作流。
+- 想用数据库存储替代 CSV/JSON。
+- 需要集成 CRM 或外部自动化平台。
 
 ## 授权 / 所有权
 
-该仓库作为 onlyPT 类型服务网站的可复用项目维护。用于第三方商业部署前，请先与仓库所有者确认授权和使用范围。
+该仓库作为 onlyPT 类型服务网站的可复用网站项目维护。用于第三方商业部署前，请先与仓库所有者确认授权和复用权限。
