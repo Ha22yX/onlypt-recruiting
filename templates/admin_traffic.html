@@ -22,7 +22,23 @@
       <div class="traffic-period-switch" aria-label="Traffic period">
         <a class="{{ 'active' if period == 'day' else '' }}" href="{{ url_for('admin_traffic', period='day') }}">Today</a>
         <a class="{{ 'active' if period == 'week' else '' }}" href="{{ url_for('admin_traffic', period='week') }}">This week</a>
+        <a class="{{ 'active' if period == 'all' else '' }}" href="{{ url_for('admin_traffic', period='all') }}">All history</a>
       </div>
+      <form class="traffic-range-form" action="{{ url_for('admin_traffic') }}" method="get">
+        <input type="hidden" name="period" value="range">
+        <label>
+          <span>From</span>
+          <input type="date" name="start" value="{{ traffic_filter.start }}">
+        </label>
+        <label>
+          <span>To</span>
+          <input type="date" name="end" value="{{ traffic_filter.end }}">
+        </label>
+        <button type="submit">
+          <i data-lucide="calendar-search"></i>
+          Apply range
+        </button>
+      </form>
       <div class="admin-leads-stat">
         <strong>{{ summary.totals.unique_visitors }}</strong>
         <span>unique visitors</span>
@@ -201,9 +217,9 @@
         </div>
         {% if records_pagination.pages > 1 %}
           <nav class="traffic-pagination" aria-label="Recent records pages">
-            <a class="{{ 'disabled' if records_pagination.page <= 1 else '' }}" href="{{ url_for('admin_traffic', period=period, records_page=records_pagination.page - 1) }}">Previous</a>
+            <a class="{{ 'disabled' if records_pagination.page <= 1 else '' }}" href="{{ records_pagination.prev_url or '#' }}">Previous</a>
             <span>Page {{ records_pagination.page }} of {{ records_pagination.pages }}</span>
-            <a class="{{ 'disabled' if records_pagination.page >= records_pagination.pages else '' }}" href="{{ url_for('admin_traffic', period=period, records_page=records_pagination.page + 1) }}">Next</a>
+            <a class="{{ 'disabled' if records_pagination.page >= records_pagination.pages else '' }}" href="{{ records_pagination.next_url or '#' }}">Next</a>
           </nav>
         {% endif %}
       </section>

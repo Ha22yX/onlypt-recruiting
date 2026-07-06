@@ -717,7 +717,7 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
     return grouped
 
 
-def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
+def summarize_traffic(start: datetime | None, end: datetime | None) -> dict[str, object]:
     events = iter_traffic_events(start, end)
     page_views = [event for event in events if event.get("type") == "page_view"]
     form_submissions = [event for event in events if event.get("type") == "form_submission"]
@@ -738,8 +738,8 @@ def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
     views_per_visitor = round((len(page_views) / len(page_visit_groups)), 1) if page_visit_groups else 0
 
     return {
-        "start": start.isoformat(),
-        "end": end.isoformat(),
+        "start": start.isoformat() if start else "",
+        "end": end.isoformat() if end else "",
         "events": events,
         "visit_groups": visit_groups,
         "totals": {
@@ -1989,13 +1989,52 @@ def admin_leads():
 @admin_required
 def admin_traffic():
     period = request.args.get("period", "day")
-    if period not in {"day", "week"}:
+    if period not in {"day", "week", "range", "all"}:
         period = "day"
     try:
         records_page = max(1, int(request.args.get("records_page", "1")))
     except ValueError:
         records_page = 1
-    start, end = period_bounds(period)
+
+    def parse_local_date(value: str) -> datetime | None:
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d")
+        except (TypeError, ValueError):
+            return None
+        return parsed.replace(tzinfo=SITE_TIMEZONE)
+
+    today_local = datetime.now(SITE_TIMEZONE)
+    date_value = request.args.get("date", "").strip()
+    range_start_value = request.args.get("start", "").strip()
+    range_end_value = request.args.get("end", "").strip()
+    filter_args: dict[str, str] = {"period": period}
+
+    if period == "all":
+        start = None
+        end = None
+        period_label = "All history"
+    elif period == "range":
+        local_start = parse_local_date(range_start_value) or (today_local - timedelta(days=6)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        local_end = parse_local_date(range_end_value) or today_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        if local_end < local_start:
+            local_start, local_end = local_end, local_start
+        start = local_start.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+        end = (local_end.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).astimezone(timezone.utc)
+        range_start_value = local_start.strftime("%Y-%m-%d")
+        range_end_value = local_end.strftime("%Y-%m-%d")
+        filter_args.update({"start": range_start_value, "end": range_end_value})
+        period_label = traffic_period_label(start, end)
+    else:
+        reference = parse_local_date(date_value) or today_local
+        reference = reference.replace(hour=12, minute=0, second=0, microsecond=0)
+        start, end = period_bounds(period, reference)
+        date_value = reference.strftime("%Y-%m-%d")
+        if request.args.get("date"):
+            filter_args["date"] = date_value
+        period_label = traffic_period_label(start, end)
+
     summary = summarize_traffic(start, end)
     records_per_page = 20
     recent_groups = summary.get("recent_groups", [])
@@ -2005,12 +2044,19 @@ def admin_traffic():
     page_start = (records_page - 1) * records_per_page
     page_end = page_start + records_per_page
     paginated_records = recent_groups[page_start:page_end] if isinstance(recent_groups, list) else []
+    prev_args = {**filter_args, "records_page": records_page - 1}
+    next_args = {**filter_args, "records_page": records_page + 1}
     report_config = traffic_report_config()
     return render_template(
         "admin_traffic.html",
         page="admin-traffic",
         period=period,
-        period_label=traffic_period_label(start, end),
+        period_label=period_label,
+        traffic_filter={
+            "date": date_value,
+            "start": range_start_value,
+            "end": range_end_value,
+        },
         summary=summary,
         recent_records=paginated_records,
         records_pagination={
@@ -2020,6 +2066,8 @@ def admin_traffic():
             "per_page": records_per_page,
             "start": page_start + 1 if total_records else 0,
             "end": min(page_end, total_records),
+            "prev_url": url_for("admin_traffic", **prev_args) if records_page > 1 else "",
+            "next_url": url_for("admin_traffic", **next_args) if records_page < total_pages else "",
         },
         report_config=report_config,
     )

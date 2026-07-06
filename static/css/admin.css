@@ -2115,7 +2115,7 @@
 
 .traffic-period-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
   padding: 5px;
   border: 1px solid rgba(24, 33, 31, 0.11);
@@ -2145,6 +2145,72 @@
   background: rgba(220, 232, 227, 0.92);
   color: var(--ink);
   box-shadow: inset 0 0 0 1px rgba(29, 111, 103, 0.13);
+}
+
+.traffic-range-form {
+  display: grid;
+  gap: 9px;
+  padding: 14px;
+  border: 1px solid rgba(24, 33, 31, 0.11);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 251, 0.78), rgba(255, 253, 246, 0.56)),
+    rgba(255, 255, 251, 0.42);
+  box-shadow: 0 12px 32px rgba(24, 33, 31, 0.05);
+}
+
+.traffic-range-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.traffic-range-form span {
+  color: var(--teal-dark);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.traffic-range-form input {
+  min-height: 38px;
+  width: 100%;
+  padding: 0 10px;
+  border: 1px solid rgba(24, 33, 31, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 251, 0.78);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 750;
+}
+
+.traffic-range-form button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(29, 111, 103, 0.2);
+  border-radius: 8px;
+  background: rgba(220, 232, 227, 0.72);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 850;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.traffic-range-form button:hover,
+.traffic-range-form button:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(29, 111, 103, 0.36);
+  background: rgba(220, 232, 227, 0.96);
+}
+
+.traffic-range-form svg {
+  width: 16px;
+  height: 16px;
 }
 
 .traffic-report-status {
