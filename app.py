@@ -25,6 +25,7 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-onlypt-secret")
+SITE_URL = os.environ.get("ONLYPT_SITE_URL", "https://onlypt.co").strip().rstrip("/") or "https://onlypt.co"
 
 LEADS_FILE = Path(app.instance_path) / "leads.csv"
 LEAD_THREADS_FILE = Path(app.instance_path) / "lead_threads.json"
@@ -62,6 +63,48 @@ MAX_EMAIL_QUEUE_ATTEMPTS = 6
 DEFAULT_TRAFFIC_REPORT_SEND_TIME = "01:00"
 TRAFFIC_REPORT_RECENT_LIMIT = 8
 PUBLIC_TRAFFIC_ENDPOINTS = {"home", "employers", "therapists", "about", "contact"}
+PUBLIC_SEO_PAGES = {
+    "home": {
+        "endpoint": "home",
+        "title": "onlyPT Recruiting | Physical Therapy Recruiting",
+        "description": "onlyPT Recruiting helps healthcare employers hire licensed Physical Therapists through focused sourcing, clinical fluency, and candidate conversations built around real fit.",
+        "keywords": "physical therapy recruiting, PT recruiting, physical therapist recruiter, healthcare recruiting, physical therapist hiring, rehab recruiting",
+        "priority": "1.0",
+        "changefreq": "weekly",
+    },
+    "employers": {
+        "endpoint": "employers",
+        "title": "Hire Physical Therapists | onlyPT Recruiting",
+        "description": "Hire licensed Physical Therapists with a focused PT recruiting partner built for healthcare employers, clinical settings, and local market realities.",
+        "keywords": "hire physical therapists, physical therapy staffing, PT hiring, physical therapist recruitment, healthcare employer recruiting",
+        "priority": "0.9",
+        "changefreq": "weekly",
+    },
+    "therapists": {
+        "endpoint": "therapists",
+        "title": "Physical Therapy Jobs | onlyPT Recruiting",
+        "description": "Explore Physical Therapist roles with a recruiting partner who understands PT settings, caseloads, mentorship, compensation, and career goals.",
+        "keywords": "physical therapy jobs, PT jobs, physical therapist careers, outpatient PT jobs, rehab therapy jobs",
+        "priority": "0.8",
+        "changefreq": "weekly",
+    },
+    "about": {
+        "endpoint": "about",
+        "title": "About onlyPT Recruiting",
+        "description": "Learn about onlyPT Recruiting, a focused Physical Therapy recruiting partner built around clinical understanding and disciplined search.",
+        "keywords": "about onlyPT, physical therapy recruiter, PT recruiting founder, healthcare search partner",
+        "priority": "0.7",
+        "changefreq": "monthly",
+    },
+    "contact": {
+        "endpoint": "contact",
+        "title": "Contact onlyPT Recruiting",
+        "description": "Contact onlyPT Recruiting to discuss Physical Therapist hiring needs, PT career opportunities, or a focused recruiting search.",
+        "keywords": "contact physical therapy recruiter, PT recruiting contact, hire PT recruiter, physical therapist recruiting consultation",
+        "priority": "0.8",
+        "changefreq": "monthly",
+    },
+}
 INTERNAL_REFERRER_HOSTS = {
     host.strip().lower()
     for host in os.environ.get(
@@ -2133,6 +2176,31 @@ def favicon_url() -> str:
     return url_for("uploaded_favicon", filename=image_name) if image_name else ""
 
 
+def canonical_url_for(endpoint: str) -> str:
+    path = url_for(endpoint)
+    return f"{SITE_URL}{path if path.startswith('/') else f'/{path}'}"
+
+
+def seo_context_for(page_key: str | None = None) -> dict[str, str]:
+    page_key = page_key or request.endpoint or "home"
+    seo = PUBLIC_SEO_PAGES.get(page_key, PUBLIC_SEO_PAGES["home"])
+    title = str(seo["title"])
+    description = str(seo["description"])
+    keywords = str(seo["keywords"])
+    canonical = canonical_url_for(str(seo["endpoint"]))
+    return {
+        "title": title,
+        "description": description,
+        "keywords": keywords,
+        "canonical": canonical,
+        "og_title": title,
+        "og_description": description,
+        "og_url": canonical,
+        "og_type": "website",
+        "twitter_card": "summary",
+    }
+
+
 def save_favicon_config(image_name: str | None) -> dict[str, str]:
     all_content = load_content_overrides()
     general_values = {
@@ -2278,6 +2346,7 @@ def inject_site_context():
         "site_background_urls": site_background_urls,
         "site_favicon_url": favicon_url(),
         "first_block_start_height": first_block_start_height(),
+        "seo": seo_context_for(request.endpoint),
     }
 
 
@@ -2297,6 +2366,46 @@ def add_dev_editor_headers(response):
 @app.get("/")
 def home():
     return render_template("index.html", page="home")
+
+
+@app.get("/robots.txt")
+def robots_txt():
+    body = "\n".join(
+        [
+            "User-agent: *",
+            "Disallow: /admin",
+            "Disallow: /dev",
+            "Disallow: /*?admin_preview=1",
+            f"Sitemap: {SITE_URL}/sitemap.xml",
+            "",
+        ]
+    )
+    return app.response_class(body, mimetype="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml():
+    today = datetime.now(SITE_TIMEZONE).date().isoformat()
+    url_entries = []
+    for page in PUBLIC_SEO_PAGES.values():
+        url_entries.append(
+            f"""  <url>
+    <loc>{html.escape(canonical_url_for(str(page["endpoint"])))}</loc>
+    <lastmod>{today}</lastmod>
+    <changefreq>{html.escape(str(page["changefreq"]))}</changefreq>
+    <priority>{html.escape(str(page["priority"]))}</priority>
+  </url>"""
+        )
+    xml = "\n".join(
+        [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            *url_entries,
+            "</urlset>",
+            "",
+        ]
+    )
+    return app.response_class(xml, mimetype="application/xml; charset=utf-8")
 
 
 @app.get("/employers")

@@ -3,8 +3,31 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="{{ cms_text('general', 'meta.description') }}">
-    <title>{% block title %}onlyPT Recruiting{% endblock %}</title>
+    <meta name="description" content="{{ seo.description }}">
+    <meta name="keywords" content="{{ seo.keywords }}">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="{{ seo.canonical }}">
+    <meta property="og:site_name" content="onlyPT Recruiting">
+    <meta property="og:type" content="{{ seo.og_type }}">
+    <meta property="og:title" content="{{ seo.og_title }}">
+    <meta property="og:description" content="{{ seo.og_description }}">
+    <meta property="og:url" content="{{ seo.og_url }}">
+    <meta name="twitter:card" content="{{ seo.twitter_card }}">
+    <meta name="twitter:title" content="{{ seo.og_title }}">
+    <meta name="twitter:description" content="{{ seo.og_description }}">
+    <title>{% block title %}{{ seo.title }}{% endblock %}</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "ProfessionalService",
+        "name": "onlyPT Recruiting",
+        "url": {{ seo.canonical|tojson }},
+        "description": {{ seo.description|tojson }},
+        "areaServed": "United States",
+        "serviceType": "Physical Therapy recruiting",
+        "knowsAbout": ["Physical Therapy recruiting", "Physical Therapist hiring", "Healthcare recruiting"]
+      }
+    </script>
     <script>
       (function bootPageState() {
         var root = document.documentElement;
