@@ -27,6 +27,9 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-onlypt-secret")
 LEADS_FILE = Path(app.instance_path) / "leads.csv"
 LEAD_THREADS_FILE = Path(app.instance_path) / "lead_threads.json"
 NOTIFICATIONS_LOG_FILE = Path(app.instance_path) / "notification_errors.log"
+SUBMISSION_LIMIT_FILE = Path(app.instance_path) / "submission_limits.json"
+EMAIL_RATE_FILE = Path(app.instance_path) / "email_rate.json"
+EMAIL_QUEUE_FILE = Path(app.instance_path) / "email_queue.json"
 PAGE_EDITS_DIR = Path(app.instance_path) / "page_edits"
 CONTENT_FILE = Path(app.instance_path) / "content_overrides.json"
 UPLOAD_DIR = Path(app.instance_path) / "uploads"
@@ -40,6 +43,13 @@ TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "").strip()
 TWILIO_WHATSAPP_FROM = os.environ.get("TWILIO_WHATSAPP_FROM", "").strip()
 TWILIO_WHATSAPP_TO = os.environ.get("TWILIO_WHATSAPP_TO", "").strip()
+IP_SUBMISSION_LIMIT = 3
+IP_SUBMISSION_WINDOW_SECONDS = 10 * 60
+EMAIL_SUBMISSION_LIMIT = 5
+EMAIL_SUBMISSION_WINDOW_SECONDS = 60 * 60
+GLOBAL_EMAIL_LIMIT = 2
+GLOBAL_EMAIL_WINDOW_SECONDS = 60
+MAX_EMAIL_QUEUE_ATTEMPTS = 6
 
 EDITABLE_PAGES = {
     "home": {"label": "Home", "endpoint": "home", "template": "index.html"},
@@ -322,6 +332,69 @@ def write_lead(form_data: dict[str, str]) -> None:
         writer.writerow(row)
 
 
+def now_timestamp() -> float:
+    return datetime.now(timezone.utc).timestamp()
+
+
+def load_json_file(path: Path, fallback):
+    if not path.exists():
+        return fallback
+    try:
+        with path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+    except (json.JSONDecodeError, OSError):
+        return fallback
+
+
+def write_json_file(path: Path, data) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
+        json.dump(data, file, ensure_ascii=False, indent=2)
+
+
+def client_ip_address() -> str:
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def normalized_form_email() -> str:
+    return email_address(request.form.get("email", "")).lower()
+
+
+def submission_rate_limit_message() -> str:
+    limits = load_json_file(SUBMISSION_LIMIT_FILE, {"ips": {}, "emails": {}})
+    current_time = now_timestamp()
+    ip = client_ip_address()
+    email = normalized_form_email()
+
+    ips = limits.setdefault("ips", {})
+    emails = limits.setdefault("emails", {})
+    ip_events = [event for event in ips.get(ip, []) if current_time - float(event) < IP_SUBMISSION_WINDOW_SECONDS]
+    email_events = [
+        event for event in emails.get(email, []) if email and current_time - float(event) < EMAIL_SUBMISSION_WINDOW_SECONDS
+    ]
+
+    ips[ip] = ip_events
+    if email:
+        emails[email] = email_events
+
+    if len(ip_events) >= IP_SUBMISSION_LIMIT:
+        write_json_file(SUBMISSION_LIMIT_FILE, limits)
+        return "Too many submissions from this network. Please wait a few minutes and try again."
+
+    if email and len(email_events) >= EMAIL_SUBMISSION_LIMIT:
+        write_json_file(SUBMISSION_LIMIT_FILE, limits)
+        return "Too many submissions from this email address. Please wait before sending another message."
+
+    ip_events.append(current_time)
+    if email:
+        email_events.append(current_time)
+    write_json_file(SUBMISSION_LIMIT_FILE, limits)
+    return ""
+
+
 def lead_id_for(row: dict[str, str]) -> str:
     signature = "|".join(
         str(row.get(key, "")).strip()
@@ -528,6 +601,91 @@ def send_direct_mx_fallback(message: EmailMessage, sender_email: str, recipients
     return True
 
 
+def email_rate_has_slot(current_time: float | None = None) -> bool:
+    current_time = current_time or now_timestamp()
+    rate_data = load_json_file(EMAIL_RATE_FILE, {"sent_at": []})
+    sent_at = [event for event in rate_data.get("sent_at", []) if current_time - float(event) < GLOBAL_EMAIL_WINDOW_SECONDS]
+    rate_data["sent_at"] = sent_at
+    write_json_file(EMAIL_RATE_FILE, rate_data)
+    return len(sent_at) < GLOBAL_EMAIL_LIMIT
+
+
+def record_email_sent(current_time: float | None = None) -> None:
+    current_time = current_time or now_timestamp()
+    rate_data = load_json_file(EMAIL_RATE_FILE, {"sent_at": []})
+    sent_at = [event for event in rate_data.get("sent_at", []) if current_time - float(event) < GLOBAL_EMAIL_WINDOW_SECONDS]
+    sent_at.append(current_time)
+    rate_data["sent_at"] = sent_at
+    write_json_file(EMAIL_RATE_FILE, rate_data)
+
+
+def queued_lead_signature(form_data: dict[str, str]) -> str:
+    signature = "|".join(
+        str(form_data.get(key, "")).strip().lower()
+        for key in ("email", "name", "organization", "phone", "role", "message")
+    )
+    return hashlib.sha1(signature.encode("utf-8")).hexdigest()
+
+
+def enqueue_lead_email(form_data: dict[str, str], reason: str = "rate_limited") -> bool:
+    queue = load_json_file(EMAIL_QUEUE_FILE, [])
+    signature = queued_lead_signature(form_data)
+    if any(item.get("signature") == signature and item.get("status") == "queued" for item in queue):
+        return False
+
+    queued_data = {key: str(value) for key, value in form_data.items()}
+    queue.append(
+        {
+            "id": hashlib.sha1(f"{signature}|{now_timestamp()}".encode("utf-8")).hexdigest()[:16],
+            "signature": signature,
+            "status": "queued",
+            "reason": reason,
+            "attempts": 0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "next_attempt_at": now_timestamp(),
+            "form_data": queued_data,
+        }
+    )
+    write_json_file(EMAIL_QUEUE_FILE, queue)
+    log_notification_error(f"Queued lead email notification because {reason}.")
+    return True
+
+
+def process_email_queue() -> int:
+    queue = load_json_file(EMAIL_QUEUE_FILE, [])
+    if not queue:
+        return 0
+
+    current_time = now_timestamp()
+    delivered_count = 0
+    changed = False
+    for item in queue:
+        if item.get("status") != "queued":
+            continue
+        if float(item.get("next_attempt_at", 0) or 0) > current_time:
+            continue
+        if not email_rate_has_slot(current_time):
+            break
+
+        item["attempts"] = int(item.get("attempts", 0)) + 1
+        if send_lead_email_now(item.get("form_data", {})):
+            item["status"] = "sent"
+            item["sent_at"] = datetime.now(timezone.utc).isoformat()
+            record_email_sent(current_time)
+            delivered_count += 1
+        elif item["attempts"] >= MAX_EMAIL_QUEUE_ATTEMPTS:
+            item["status"] = "failed"
+            item["failed_at"] = datetime.now(timezone.utc).isoformat()
+            log_notification_error(f"Queued lead email notification failed permanently after {item['attempts']} attempts.")
+        else:
+            item["next_attempt_at"] = current_time + min(15 * 60 * item["attempts"], 60 * 60)
+        changed = True
+
+    if changed:
+        write_json_file(EMAIL_QUEUE_FILE, queue)
+    return delivered_count
+
+
 def lead_email_config() -> dict[str, str]:
     email_values = load_content_overrides().get("email", {})
 
@@ -623,7 +781,7 @@ def lead_email_html(form_data: dict[str, str]) -> str:
 </html>"""
 
 
-def notify_lead_email(form_data: dict[str, str]) -> bool:
+def send_lead_email_now(form_data: dict[str, str]) -> bool:
     config = lead_email_config()
     if config["enabled"] != "on":
         return False
@@ -677,6 +835,21 @@ def notify_lead_email(form_data: dict[str, str]) -> bool:
         return False
 
     return True
+
+
+def notify_lead_email(form_data: dict[str, str]) -> bool:
+    process_email_queue()
+    current_time = now_timestamp()
+    if not email_rate_has_slot(current_time):
+        enqueue_lead_email(form_data, "global email rate limit")
+        return False
+
+    if send_lead_email_now(form_data):
+        record_email_sent(current_time)
+        return True
+
+    enqueue_lead_email(form_data, "send failure")
+    return False
 
 
 def notify_lead_whatsapp(form_data: dict[str, str]) -> bool:
@@ -1037,6 +1210,11 @@ def contact():
         required = ["name", "email", "message"]
         if not all(request.form.get(field, "").strip() for field in required):
             flash(cms_text("contact", "flash.missing"), "error")
+            return redirect(url_for("contact"))
+
+        rate_limit_message = submission_rate_limit_message()
+        if rate_limit_message:
+            flash(rate_limit_message, "error")
             return redirect(url_for("contact"))
 
         lead_data = request.form.to_dict()
