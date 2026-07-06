@@ -684,7 +684,6 @@
       "lead_email.enabled": "Keep this on when contact form submissions should trigger email alerts.",
       "traffic_report.daily_enabled": "Sends the previous day's traffic report after the day closes.",
       "traffic_report.weekly_enabled": "Sends the previous week's traffic report every Monday.",
-      "traffic_report.to": "Destination for traffic reports. Use one or more emails separated by commas.",
       "lead_email.from_email": "Use the Zoho mailbox address so SPF/DKIM alignment stays clean.",
       "lead_email.from_name": "This is the display name admins see in their inbox.",
       "lead_email.smtp_host": "Rarely changes after setup. Zoho usually uses smtppro.zoho.com.",
@@ -703,7 +702,7 @@
     }
 
     const hints = {
-      "Notification target": "Who receives contact alerts and traffic reports. Test reports use the Traffic report recipient field.",
+      "Notification target": "Who receives contact alerts and traffic reports. Test reports use Admin notification email.",
       "Sender identity": "Inbox-facing sender details. Keep these aligned with the Zoho mailbox.",
       "SMTP access": "Connection details for Zoho. These should only change when the mailbox or provider changes.",
     };
@@ -810,7 +809,7 @@
       <div class="admin-field-action-card" data-traffic-report-test-card>
         <div>
           <strong>Test traffic report</strong>
-          <p>Send a one-time report for the past 24 hours to Traffic report recipient.</p>
+          <p>Send a one-time report for the past 24 hours to Admin notification email.</p>
           <small data-traffic-report-test-status></small>
         </div>
         <button type="button" class="admin-test-report-button" data-send-test-traffic-report>

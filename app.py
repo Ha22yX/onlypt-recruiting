@@ -131,7 +131,6 @@ CONTENT_PAGES = {
             cms_field("lead_email.enabled", "Send email lead notifications", "off", "toggle", "Notification target"),
             cms_field("traffic_report.daily_enabled", "Send daily traffic report", "off", "toggle", "Notification target"),
             cms_field("traffic_report.weekly_enabled", "Send weekly traffic report", "off", "toggle", "Notification target"),
-            cms_field("traffic_report.to", "Traffic report recipient", "", group="Notification target"),
             cms_field("lead_email.from_email", "Sender email address", "", group="Sender identity"),
             cms_field("lead_email.from_name", "Sender display name", "onlyPT Recruiting", group="Sender identity"),
             cms_field("lead_email.smtp_host", "SMTP server", "smtppro.zoho.com", group="SMTP access"),
@@ -1341,7 +1340,7 @@ def traffic_report_config() -> dict[str, str]:
     return {
         "daily_enabled": str(email_values.get("traffic_report.daily_enabled", "off")).strip().lower(),
         "weekly_enabled": str(email_values.get("traffic_report.weekly_enabled", "off")).strip().lower(),
-        "to": str(email_values.get("traffic_report.to", "")).strip(),
+        "to": str(email_values.get("lead_email.to", "")).strip(),
     }
 
 
@@ -2150,7 +2149,7 @@ def admin_send_test_traffic_report():
     report_config = traffic_report_config()
     recipients = email_recipients(report_config["to"])
     if not recipients:
-        return jsonify({"ok": False, "message": "Set Traffic report recipient before sending a test report."}), 400
+        return jsonify({"ok": False, "message": "Set Admin notification email before sending a test report."}), 400
 
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=24)
@@ -2173,7 +2172,7 @@ def admin_send_test_traffic_report():
         require_enabled=False,
     )
     if not sent:
-        return jsonify({"ok": False, "message": "Could not send the test report. Check SMTP settings and recipient."}), 500
+        return jsonify({"ok": False, "message": "Could not send the test report. Check SMTP settings and Admin notification email."}), 500
 
     return jsonify(
         {

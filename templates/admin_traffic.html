@@ -54,7 +54,7 @@
           <span class="{{ 'enabled' if report_config.daily_enabled == 'on' else '' }}">Daily {{ 'on' if report_config.daily_enabled == 'on' else 'off' }}</span>
           <span class="{{ 'enabled' if report_config.weekly_enabled == 'on' else '' }}">Weekly {{ 'on' if report_config.weekly_enabled == 'on' else 'off' }}</span>
         </div>
-        <small>{{ report_config.to or 'Using lead email recipients' }}</small>
+        <small>{{ report_config.to or 'Set Admin notification email' }}</small>
       </div>
       <a class="admin-leads-helper" href="{{ url_for('admin_content', page_key='email') }}">
         <i data-lucide="mail"></i>
