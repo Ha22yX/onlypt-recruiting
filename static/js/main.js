@@ -102,14 +102,51 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   };
 
-  const markNavTarget = (link) => {
-    if (!nav || !link) {
+  const readNavIndicatorMetrics = (target = nav?.querySelector("a.active")) => {
+    if (!nav || !target || mobileNavQuery.matches) {
+      return null;
+    }
+    const navRect = nav.getBoundingClientRect();
+    const linkRect = target.getBoundingClientRect();
+    return {
+      x: linkRect.left - navRect.left,
+      y: linkRect.top - navRect.top,
+      width: linkRect.width,
+      height: linkRect.height,
+    };
+  };
+
+  const writeNavIndicatorMetrics = (indicator, metrics) => {
+    if (!indicator || !metrics) {
       return;
     }
-    nav.querySelectorAll("a").forEach((navLink) => {
-      navLink.classList.toggle("active", navLink === link);
+    indicator.style.setProperty("--nav-indicator-x", `${metrics.x.toFixed(2)}px`);
+    indicator.style.setProperty("--nav-indicator-y", `${metrics.y.toFixed(2)}px`);
+    indicator.style.setProperty("--nav-indicator-width", `${metrics.width.toFixed(2)}px`);
+    indicator.style.setProperty("--nav-indicator-height", `${metrics.height.toFixed(2)}px`);
+  };
+
+  const animateNavIndicatorFrom = (previousMetrics, target = nav?.querySelector("a.active")) => {
+    if (!nav || !previousMetrics || !target || mobileNavQuery.matches) {
+      syncNavIndicator(target);
+      return;
+    }
+    const indicator = ensureNavIndicator();
+    if (!indicator) {
+      return;
+    }
+    if (navIndicatorFrame) {
+      window.cancelAnimationFrame(navIndicatorFrame);
+    }
+
+    indicator.classList.add("is-instant");
+    writeNavIndicatorMetrics(indicator, previousMetrics);
+    nav.classList.add("has-active-indicator");
+
+    navIndicatorFrame = window.requestAnimationFrame(() => {
+      indicator.classList.remove("is-instant");
+      syncNavIndicator(target);
     });
-    syncNavIndicator(link);
   };
 
   const bindNavLinks = () => {
@@ -402,10 +439,11 @@ window.addEventListener("DOMContentLoaded", () => {
     const nextNav = nextDocument.querySelector(".site-nav");
     const currentNav = document.querySelector(".site-nav");
     if (nextNav && currentNav) {
+      const previousMetrics = readNavIndicatorMetrics(currentNav.querySelector("a.active"));
       currentNav.innerHTML = nextNav.innerHTML;
       ensureNavIndicator();
       bindNavLinks();
-      syncNavIndicator(currentNav.querySelector("a.active"));
+      animateNavIndicatorFrom(previousMetrics, currentNav.querySelector("a.active"));
     }
 
     const nextHeaderCta = nextDocument.querySelector(".header-cta");
@@ -484,9 +522,6 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     event.preventDefault();
-    if (link.closest(".site-nav")) {
-      markNavTarget(link);
-    }
     navigatePjax(link.href);
   });
 
