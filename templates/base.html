@@ -30,10 +30,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260704-brand-favicon1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260704-firstblock-container-offset1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260706-contact-modal1">
     {% block extra_head %}{% endblock %}
     <script src="https://unpkg.com/lucide@latest" defer></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260609-static-bg1" defer></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v=20260706-contact-modal1" defer></script>
   </head>
   <body
     class="{{ 'site-background-enabled' if site_background_enabled else '' }}"
@@ -90,11 +90,24 @@
 
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
-        <div class="flash-stack" role="status" aria-live="polite">
-          {% for category, message in messages %}
-            <div class="flash {{ category }}">{{ message }}</div>
-          {% endfor %}
-        </div>
+        {% for category, message in messages %}
+          {% set feedback_is_error = category == 'error' %}
+          <div class="site-feedback-modal is-{{ category }}" data-feedback-modal role="alertdialog" aria-modal="true" aria-labelledby="feedback-title-{{ loop.index }}" aria-describedby="feedback-message-{{ loop.index }}">
+            <button class="site-feedback-backdrop" type="button" data-feedback-dismiss aria-label="Close message"></button>
+            <section class="site-feedback-card" role="document" tabindex="-1">
+              <button class="site-feedback-close" type="button" data-feedback-dismiss aria-label="Close message">
+                <i data-lucide="x"></i>
+              </button>
+              <span class="site-feedback-icon" aria-hidden="true">
+                <i data-lucide="{{ 'circle-alert' if feedback_is_error else 'check' }}"></i>
+              </span>
+              <p class="site-feedback-kicker">{{ 'Check the form' if feedback_is_error else 'Message sent' }}</p>
+              <h2 id="feedback-title-{{ loop.index }}">{{ 'Almost there' if feedback_is_error else 'Thank you' }}</h2>
+              <p id="feedback-message-{{ loop.index }}" class="site-feedback-message">{{ message }}</p>
+              <button class="site-feedback-action" type="button" data-feedback-dismiss data-feedback-primary>Done</button>
+            </section>
+          </div>
+        {% endfor %}
       {% endif %}
     {% endwith %}
 

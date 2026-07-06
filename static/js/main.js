@@ -19,6 +19,38 @@ window.addEventListener("DOMContentLoaded", () => {
     window.lucide.createIcons();
   }
 
+  const closeFeedbackModal = (modal) => {
+    if (!modal || modal.classList.contains("is-closing")) {
+      return;
+    }
+
+    modal.classList.add("is-closing");
+    window.setTimeout(() => {
+      modal.remove();
+    }, 240);
+  };
+
+  const feedbackModals = document.querySelectorAll("[data-feedback-modal]");
+  feedbackModals.forEach((modal) => {
+    const focusTarget = modal.querySelector("[data-feedback-primary]") || modal.querySelector(".site-feedback-card");
+    window.requestAnimationFrame(() => {
+      modal.classList.add("is-visible");
+      focusTarget?.focus({ preventScroll: true });
+    });
+
+    modal.querySelectorAll("[data-feedback-dismiss]").forEach((control) => {
+      control.addEventListener("click", () => closeFeedbackModal(modal));
+    });
+  });
+
+  if (feedbackModals.length) {
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        document.querySelectorAll("[data-feedback-modal]").forEach(closeFeedbackModal);
+      }
+    });
+  }
+
   const navToggle = document.querySelector(".nav-toggle");
   const nav = document.querySelector(".site-nav");
   const siteHeader = document.querySelector(".site-header");
