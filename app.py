@@ -1551,24 +1551,34 @@ def record_email_sent(current_time: float | None = None) -> None:
     write_json_file(EMAIL_RATE_FILE, rate_data)
 
 
-def queued_lead_signature(form_data: dict[str, str]) -> str:
+def queued_lead_signature(form_data: dict[str, str], email_type: str = "lead_notification") -> str:
     signature = "|".join(
         str(form_data.get(key, "")).strip().lower()
         for key in ("email", "name", "organization", "phone", "role", "message")
     )
-    return hashlib.sha1(signature.encode("utf-8")).hexdigest()
+    return hashlib.sha1(f"{email_type}|{signature}".encode("utf-8")).hexdigest()
 
 
-def enqueue_lead_email(form_data: dict[str, str], reason: str = "rate_limited") -> bool:
+def enqueue_lead_email(
+    form_data: dict[str, str],
+    reason: str = "rate_limited",
+    email_type: str = "lead_notification",
+) -> bool:
     queue = load_json_file(EMAIL_QUEUE_FILE, [])
-    signature = queued_lead_signature(form_data)
-    if any(item.get("signature") == signature and item.get("status") == "queued" for item in queue):
+    signature = queued_lead_signature(form_data, email_type)
+    if any(
+        item.get("signature") == signature
+        and item.get("status") == "queued"
+        and item.get("type", "lead_notification") == email_type
+        for item in queue
+    ):
         return False
 
     queued_data = {key: str(value) for key, value in form_data.items()}
     queue.append(
         {
             "id": hashlib.sha1(f"{signature}|{now_timestamp()}".encode("utf-8")).hexdigest()[:16],
+            "type": email_type,
             "signature": signature,
             "status": "queued",
             "reason": reason,
@@ -1579,7 +1589,7 @@ def enqueue_lead_email(form_data: dict[str, str], reason: str = "rate_limited") 
         }
     )
     write_json_file(EMAIL_QUEUE_FILE, queue)
-    log_notification_error(f"Queued lead email notification because {reason}.")
+    log_notification_error(f"Queued {email_type} email because {reason}.")
     return True
 
 
@@ -1600,7 +1610,13 @@ def process_email_queue() -> int:
             break
 
         item["attempts"] = int(item.get("attempts", 0)) + 1
-        if send_lead_email_now(item.get("form_data", {})):
+        email_type = item.get("type", "lead_notification")
+        send_ok = (
+            send_submitter_confirmation_now(item.get("form_data", {}))
+            if email_type == "submitter_confirmation"
+            else send_lead_email_now(item.get("form_data", {}))
+        )
+        if send_ok:
             item["status"] = "sent"
             item["sent_at"] = datetime.now(timezone.utc).isoformat()
             record_email_sent(current_time)
@@ -1608,7 +1624,7 @@ def process_email_queue() -> int:
         elif item["attempts"] >= MAX_EMAIL_QUEUE_ATTEMPTS:
             item["status"] = "failed"
             item["failed_at"] = datetime.now(timezone.utc).isoformat()
-            log_notification_error(f"Queued lead email notification failed permanently after {item['attempts']} attempts.")
+            log_notification_error(f"Queued {email_type} email failed permanently after {item['attempts']} attempts.")
         else:
             item["next_attempt_at"] = current_time + min(15 * 60 * item["attempts"], 60 * 60)
         changed = True
@@ -1779,6 +1795,81 @@ def lead_email_html(form_data: dict[str, str]) -> str:
 </html>"""
 
 
+def submitter_confirmation_text(form_data: dict[str, str]) -> str:
+    name = form_data.get("name", "").strip()
+    greeting = f"Hi {name}," if name else "Hi,"
+    return "\n".join(
+        [
+            greeting,
+            "",
+            "Thank you for contacting onlyPT. We have received your information and will get back to you as soon as possible.",
+            "",
+            "This is an automated confirmation that your message was submitted successfully.",
+            "",
+            "onlyPT Recruiting",
+        ]
+    )
+
+
+def submitter_confirmation_html(form_data: dict[str, str]) -> str:
+    name = form_data.get("name", "").strip()
+    greeting = f"Hi {html.escape(name)}," if name else "Hi,"
+    preheader = "We received your onlyPT contact form submission."
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <title>We received your message</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f7f5ee;color:#18211f;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{html.escape(preheader)}</div>
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#f7f5ee;">
+      <tr>
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;max-width:640px;border-collapse:collapse;background:#fffffb;border:1px solid #dce8e3;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 30px 26px;background:#fffffb;border-bottom:1px solid #dce8e3;">
+                <div style="font-family:Georgia,serif;font-size:32px;line-height:1;font-weight:700;color:#18211f;">onlyPT</div>
+                <div style="margin-top:8px;font-family:Arial,sans-serif;font-size:12px;line-height:1.4;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#1d6f67;">Message received</div>
+                <h1 style="margin:22px 0 0;font-family:Georgia,serif;font-size:34px;line-height:1.08;font-weight:700;color:#18211f;">We received your information.</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 30px 30px;background:#fffffb;">
+                <p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:16px;line-height:1.65;font-weight:600;color:#18211f;">{greeting}</p>
+                <p style="margin:0 0 16px;font-family:Arial,sans-serif;font-size:16px;line-height:1.65;color:#5f6d68;">Thank you for contacting onlyPT. We have received your information and will get back to you as soon as possible.</p>
+                <p style="margin:0;font-family:Arial,sans-serif;font-size:14px;line-height:1.6;color:#5f6d68;">This is an automated confirmation that your message was submitted successfully.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 30px 24px;background:#f7f5ee;border-top:1px solid #e4e9e5;">
+                <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;line-height:1.6;color:#5f6d68;">onlyPT Recruiting</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+
+def send_submitter_confirmation_now(form_data: dict[str, str]) -> bool:
+    submitter_email = email_address(form_data.get("email", ""))
+    if not submitter_email:
+        return False
+    return send_smtp_email(
+        "We received your message | onlyPT",
+        submitter_confirmation_text(form_data),
+        submitter_confirmation_html(form_data),
+        submitter_email,
+        require_enabled=False,
+    )
+
+
 def send_lead_email_now(form_data: dict[str, str]) -> bool:
     config = lead_email_config()
     if config["enabled"] != "on":
@@ -1844,6 +1935,24 @@ def notify_lead_email(form_data: dict[str, str]) -> bool:
         return True
 
     enqueue_lead_email(form_data, "send failure")
+    return False
+
+
+def notify_submitter_confirmation(form_data: dict[str, str]) -> bool:
+    if not email_address(form_data.get("email", "")):
+        return False
+
+    process_email_queue()
+    current_time = now_timestamp()
+    if not email_rate_has_slot(current_time):
+        enqueue_lead_email(form_data, "global email rate limit", "submitter_confirmation")
+        return False
+
+    if send_submitter_confirmation_now(form_data):
+        record_email_sent(current_time)
+        return True
+
+    enqueue_lead_email(form_data, "send failure", "submitter_confirmation")
     return False
 
 
@@ -2221,6 +2330,7 @@ def contact():
         write_lead(lead_data)
         record_form_submission_event(lead_data)
         notify_lead_email(lead_data)
+        notify_submitter_confirmation(lead_data)
         notify_lead_whatsapp(lead_data)
         flash(cms_text("contact", "flash.success"), "success")
         return redirect(url_for("contact"))
