@@ -22,6 +22,7 @@
   const backgroundConfigUrl = editor.dataset.backgroundConfigUrl;
   const faviconUploadUrl = editor.dataset.faviconUploadUrl;
   const faviconDeleteUrl = editor.dataset.faviconDeleteUrl;
+  const trafficReportTestUrl = editor.dataset.trafficReportTestUrl;
 
   let pageKey = editor.dataset.adminPage;
   let activeInput = null;
@@ -681,6 +682,9 @@
     const hints = {
       "lead_email.to": "Primary destination for every contact form notification. Use one or more admin emails separated by commas.",
       "lead_email.enabled": "Keep this on when contact form submissions should trigger email alerts.",
+      "traffic_report.daily_enabled": "Sends the previous day's traffic report after the day closes.",
+      "traffic_report.weekly_enabled": "Sends the previous week's traffic report every Monday.",
+      "traffic_report.to": "Destination for traffic reports. Use one or more emails separated by commas.",
       "lead_email.from_email": "Use the Zoho mailbox address so SPF/DKIM alignment stays clean.",
       "lead_email.from_name": "This is the display name admins see in their inbox.",
       "lead_email.smtp_host": "Rarely changes after setup. Zoho usually uses smtppro.zoho.com.",
@@ -699,7 +703,7 @@
     }
 
     const hints = {
-      "Notification target": "Who receives contact form alerts. This is the setting you are most likely to edit.",
+      "Notification target": "Who receives contact alerts and traffic reports. Test reports use the Traffic report recipient field.",
       "Sender identity": "Inbox-facing sender details. Keep these aligned with the Zoho mailbox.",
       "SMTP access": "Connection details for Zoho. These should only change when the mailbox or provider changes.",
     };
@@ -797,6 +801,111 @@
     `;
   };
 
+  const groupActionTemplate = (groupName) => {
+    if (pageKey !== "email" || groupName !== "Notification target") {
+      return "";
+    }
+
+    return `
+      <div class="admin-field-action-card" data-traffic-report-test-card>
+        <div>
+          <strong>Test traffic report</strong>
+          <p>Send a one-time report for the past 24 hours to Traffic report recipient.</p>
+          <small data-traffic-report-test-status></small>
+        </div>
+        <button type="button" class="admin-test-report-button" data-send-test-traffic-report>
+          <i data-lucide="send"></i>
+          <span>Send test</span>
+        </button>
+      </div>
+    `;
+  };
+
+  const collectCurrentValues = () => {
+    const values = {};
+    currentInputs.forEach((input) => {
+      values[input.dataset.cmsKey] = getInputValue(input);
+    });
+    return values;
+  };
+
+  const saveCurrentPageValues = async () => {
+    const response = await fetch(pages[pageKey].saveUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ values: collectCurrentValues() }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.message || "Save failed.");
+    }
+    pages[pageKey].values = payload.values;
+    return payload;
+  };
+
+  const sendTestTrafficReport = async (button) => {
+    if (!trafficReportTestUrl || button.disabled) {
+      return;
+    }
+
+    const statusTarget = button.closest("[data-traffic-report-test-card]")?.querySelector("[data-traffic-report-test-status]");
+    const label = button.querySelector("span");
+    const icon = button.querySelector("i");
+
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.classList.remove("is-sent", "is-error");
+    button.classList.add("is-sending");
+    if (label) label.textContent = "Sending...";
+    if (icon) icon.setAttribute("data-lucide", "loader-circle");
+    if (statusTarget) statusTarget.textContent = "Saving settings, then sending the report...";
+    setStatus("Sending test traffic report...", "");
+    window.lucide?.createIcons();
+
+    try {
+      await saveCurrentPageValues();
+      const response = await fetch(trafficReportTestUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Could not send test report.");
+      }
+
+      button.classList.remove("is-sending");
+      button.classList.add("is-sent");
+      if (label) label.textContent = "Sent";
+      if (icon) icon.setAttribute("data-lucide", "check");
+      if (statusTarget) statusTarget.textContent = payload.message || "Test report sent.";
+      setStatus(payload.message || "Test traffic report sent.", "success");
+    } catch (error) {
+      button.classList.remove("is-sending");
+      button.classList.add("is-error");
+      if (label) label.textContent = "Send test";
+      if (icon) icon.setAttribute("data-lucide", "circle-alert");
+      if (statusTarget) statusTarget.textContent = error.message || "Could not send test report.";
+      setStatus(error.message || "Could not send test report.", "error");
+    } finally {
+      button.disabled = false;
+      button.removeAttribute("aria-busy");
+      window.lucide?.createIcons();
+      window.setTimeout(() => {
+        button.classList.remove("is-sent", "is-error", "is-sending");
+        if (label) label.textContent = "Send test";
+        if (icon) icon.setAttribute("data-lucide", "send");
+        window.lucide?.createIcons();
+      }, 2600);
+    }
+  };
+
   const renderFields = () => {
     const page = pages[pageKey];
     let activeGroup = "";
@@ -805,6 +914,7 @@
     page.fields.forEach((field) => {
       if (field.group !== activeGroup) {
         if (activeGroup) {
+          html += groupActionTemplate(activeGroup);
           html += `</div></section>`;
         }
         activeGroup = field.group;
@@ -822,6 +932,7 @@
       html += fieldTemplate(field, page.values[field.key] ?? field.default ?? "");
     });
     if (activeGroup) {
+      html += groupActionTemplate(activeGroup);
       html += `</div></section>`;
     }
 
@@ -852,6 +963,10 @@
       });
       input.addEventListener("focus", () => focusPreview(input));
       input.addEventListener("click", () => focusPreview(input));
+    });
+
+    fieldList.querySelector("[data-send-test-traffic-report]")?.addEventListener("click", (event) => {
+      sendTestTrafficReport(event.currentTarget);
     });
 
     fieldList.querySelectorAll("[data-upload-input]").forEach((uploadInput) => {

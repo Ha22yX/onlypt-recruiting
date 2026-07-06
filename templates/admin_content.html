@@ -11,6 +11,7 @@
   data-background-config-url="{{ background_config_url }}"
   data-favicon-upload-url="{{ favicon_upload_url }}"
   data-favicon-delete-url="{{ favicon_delete_url }}"
+  data-traffic-report-test-url="{{ traffic_report_test_url }}"
 >
   <aside class="admin-editor-sidebar">
     <div class="admin-editor-head">
@@ -67,5 +68,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{{ url_for('static', filename='js/admin.js') }}?v=20260707-traffic-dashboard1"></script>
+  <script src="{{ url_for('static', filename='js/admin.js') }}?v=20260707-traffic-report-test1"></script>
 {% endblock %}

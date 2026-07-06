@@ -121,6 +121,9 @@ CONTENT_PAGES = {
         "fields": [
             cms_field("lead_email.to", "Admin notification email", "", group="Notification target"),
             cms_field("lead_email.enabled", "Send email lead notifications", "off", "toggle", "Notification target"),
+            cms_field("traffic_report.daily_enabled", "Send daily traffic report", "off", "toggle", "Notification target"),
+            cms_field("traffic_report.weekly_enabled", "Send weekly traffic report", "off", "toggle", "Notification target"),
+            cms_field("traffic_report.to", "Traffic report recipient", "", group="Notification target"),
             cms_field("lead_email.from_email", "Sender email address", "", group="Sender identity"),
             cms_field("lead_email.from_name", "Sender display name", "onlyPT Recruiting", group="Sender identity"),
             cms_field("lead_email.smtp_host", "SMTP server", "smtppro.zoho.com", group="SMTP access"),
@@ -128,9 +131,6 @@ CONTENT_PAGES = {
             cms_field("lead_email.smtp_security", "SMTP security", "ssl", group="SMTP access"),
             cms_field("lead_email.smtp_username", "SMTP username", "", group="SMTP access"),
             cms_field("lead_email.smtp_password", "SMTP password", "", "password", "SMTP access"),
-            cms_field("traffic_report.daily_enabled", "Send daily traffic report", "off", "toggle", "Traffic reports"),
-            cms_field("traffic_report.weekly_enabled", "Send weekly traffic report", "off", "toggle", "Traffic reports"),
-            cms_field("traffic_report.to", "Traffic report recipient", "", group="Traffic reports"),
         ],
     },
     "home": {
@@ -643,12 +643,21 @@ def traffic_report_subject(period: str, start: datetime, end: datetime) -> str:
     return f"{label} onlyPT traffic report - {traffic_period_label(start, end)}"
 
 
-def build_traffic_report(period: str, reference: datetime | None = None) -> dict[str, str]:
-    start, end = period_bounds(period, reference)
+def build_traffic_report(
+    period: str,
+    reference: datetime | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    period_name: str | None = None,
+    period_label: str | None = None,
+    subject: str | None = None,
+) -> dict[str, str]:
+    if start is None or end is None:
+        start, end = period_bounds(period, reference)
     summary = summarize_traffic(start, end)
     totals = summary["totals"]
-    period_name = "Weekly" if period == "week" else "Daily"
-    period_label = traffic_period_label(start, end)
+    period_name = period_name or ("Weekly" if period == "week" else "Daily")
+    period_label = period_label or traffic_period_label(start, end)
 
     def lines_for_table(title: str, rows: list[dict[str, object]]) -> list[str]:
         output = [title]
@@ -737,7 +746,7 @@ def build_traffic_report(period: str, reference: datetime | None = None) -> dict
 </html>"""
 
     return {
-        "subject": traffic_report_subject(period, start, end),
+        "subject": subject or traffic_report_subject(period, start, end),
         "text": text_body,
         "html": html_body,
         "start": start.isoformat(),
@@ -752,7 +761,7 @@ def send_traffic_report(period: str, reference: datetime | None = None) -> bool:
     if period == "week" and config["weekly_enabled"] != "on":
         return False
     report = build_traffic_report(period, reference)
-    return send_smtp_email(report["subject"], report["text"], report["html"], config["to"])
+    return send_smtp_email(report["subject"], report["text"], report["html"], config["to"], require_enabled=False)
 
 
 def process_scheduled_traffic_reports(reference: datetime | None = None) -> int:
@@ -1114,9 +1123,15 @@ def traffic_report_config() -> dict[str, str]:
     }
 
 
-def send_smtp_email(subject: str, text_body: str, html_body: str, to_override: str = "") -> bool:
+def send_smtp_email(
+    subject: str,
+    text_body: str,
+    html_body: str,
+    to_override: str = "",
+    require_enabled: bool = True,
+) -> bool:
     config = lead_email_config()
-    if config["enabled"] != "on":
+    if require_enabled and config["enabled"] != "on":
         return False
 
     sender_email = email_address(config["from_email"])
@@ -1812,6 +1827,7 @@ def admin_content(page_key: str):
         background_config_url=url_for("admin_save_background_config"),
         favicon_upload_url=url_for("admin_upload_favicon"),
         favicon_delete_url=url_for("admin_delete_favicon"),
+        traffic_report_test_url=url_for("admin_send_test_traffic_report"),
     )
 
 
@@ -1833,6 +1849,47 @@ def admin_save_content(page_key: str):
             "page": page_key,
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "values": saved_values,
+        }
+    )
+
+
+@app.post("/admin/api/traffic-report/test")
+@admin_required
+def admin_send_test_traffic_report():
+    report_config = traffic_report_config()
+    recipients = email_recipients(report_config["to"])
+    if not recipients:
+        return jsonify({"ok": False, "message": "Set Traffic report recipient before sending a test report."}), 400
+
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(hours=24)
+    local_start = start.astimezone(SITE_TIMEZONE)
+    local_end = end.astimezone(SITE_TIMEZONE)
+    period_label = f"{local_start.strftime('%Y-%m-%d %H:%M')} to {local_end.strftime('%Y-%m-%d %H:%M %Z')}"
+    report = build_traffic_report(
+        "last24",
+        start=start,
+        end=end,
+        period_name="Past 24 hours",
+        period_label=period_label,
+        subject=f"Test onlyPT traffic report - past 24 hours - {period_label}",
+    )
+    sent = send_smtp_email(
+        report["subject"],
+        report["text"],
+        report["html"],
+        report_config["to"],
+        require_enabled=False,
+    )
+    if not sent:
+        return jsonify({"ok": False, "message": "Could not send the test report. Check SMTP settings and recipient."}), 500
+
+    return jsonify(
+        {
+            "ok": True,
+            "message": f"Test traffic report sent to {', '.join(recipients)}.",
+            "recipients": recipients,
+            "period": period_label,
         }
     )
 

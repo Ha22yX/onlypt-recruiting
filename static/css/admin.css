@@ -1049,6 +1049,88 @@
   background: rgba(255, 255, 251, 0.36);
 }
 
+.admin-field-action-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0 0;
+  padding: 14px;
+  border: 1px solid rgba(29, 111, 103, 0.14);
+  border-radius: 9px;
+  background:
+    linear-gradient(135deg, rgba(220, 232, 227, 0.42), rgba(255, 255, 251, 0.78)),
+    rgba(255, 255, 251, 0.5);
+}
+
+.admin-field-action-card strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
+.admin-field-action-card p,
+.admin-field-action-card small {
+  display: block;
+  margin: 5px 0 0;
+  color: rgba(24, 33, 31, 0.64);
+  font-size: 0.82rem;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.admin-test-report-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 13px;
+  border: 1px solid rgba(29, 111, 103, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 251, 0.72);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 850;
+  white-space: nowrap;
+  transition: transform 180ms ease, background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.admin-test-report-button:hover,
+.admin-test-report-button:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(29, 111, 103, 0.4);
+  background: rgba(255, 255, 251, 0.92);
+}
+
+.admin-test-report-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.admin-test-report-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.admin-test-report-button.is-sending svg {
+  animation: adminSaveSpin 900ms linear infinite;
+}
+
+.admin-test-report-button.is-sent {
+  background: var(--teal-dark);
+  border-color: rgba(15, 76, 71, 0.8);
+  color: #fffffb;
+}
+
+.admin-test-report-button.is-error {
+  background: var(--copper);
+  border-color: rgba(184, 91, 55, 0.8);
+  color: #fffffb;
+}
+
 .admin-field-row.is-active {
   transform: none;
   margin: 0 -4px;
@@ -1920,6 +2002,14 @@
 
   .admin-page-tabs {
     grid-template-columns: 1fr;
+  }
+
+  .admin-field-action-card {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-test-report-button {
+    width: 100%;
   }
 
   .admin-editor[data-admin-page="email"] .admin-field-group[data-field-group="SMTP access"] .admin-field-group-body {
