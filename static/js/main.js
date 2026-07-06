@@ -475,6 +475,9 @@ window.addEventListener("DOMContentLoaded", () => {
     if (url.origin !== window.location.origin) {
       return false;
     }
+    if (url.pathname === window.location.pathname && url.search === window.location.search && !url.hash) {
+      return false;
+    }
     if (url.hash && url.pathname === window.location.pathname && url.search === window.location.search) {
       return false;
     }
