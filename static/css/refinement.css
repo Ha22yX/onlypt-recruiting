@@ -7964,3 +7964,13 @@ html.pjax-loading .scroll-progress {
     background: rgba(220, 232, 227, 0.92) !important;
   }
 }
+
+/* PJAX swaps should never leave newly inserted sections or reveal blocks hidden. */
+.js.pjax-content-ready main > section,
+.js.pjax-content-ready main > section.page-enter,
+.js.pjax-content-ready main .reveal,
+.js.pjax-content-ready main .reveal.visible {
+  opacity: 1 !important;
+  transform: translateY(0) scale(1) !important;
+  filter: blur(0) !important;
+}

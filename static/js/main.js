@@ -329,16 +329,19 @@ window.addEventListener("DOMContentLoaded", () => {
       window.lucide.createIcons();
     }
 
+    document.documentElement.classList.add("pjax-content-ready");
+
     document.querySelectorAll("main > section").forEach((section, index) => {
       section.classList.add("page-enter");
       section.style.setProperty("--page-enter-delay", `${Math.min(index * 55, 220)}ms`);
+      section.style.opacity = "";
+      section.style.transform = "";
+      section.style.filter = "";
     });
 
     document.querySelectorAll("main .reveal").forEach((element, index) => {
       element.style.setProperty("--reveal-delay", `${Math.min(index * 35, 220)}ms`);
-      if (mobileLiteQuery.matches || prefersReducedMotion) {
-        element.classList.add("visible");
-      }
+      element.classList.add("visible");
     });
 
     document.querySelectorAll("main > section.cta-panel").forEach((panel) => {
@@ -403,12 +406,7 @@ window.addEventListener("DOMContentLoaded", () => {
     document.documentElement.classList.remove("page-loading", "pjax-loading");
     document.documentElement.classList.add("page-ready", "page-entered");
     window.requestAnimationFrame(() => {
-      document.querySelectorAll("main .reveal").forEach((element) => {
-        const rect = element.getBoundingClientRect();
-        if (rect.top < window.innerHeight * 0.96 && rect.bottom > 0) {
-          element.classList.add("visible");
-        }
-      });
+      document.querySelectorAll("main .reveal").forEach((element) => element.classList.add("visible"));
       updateProgress();
     });
   };
