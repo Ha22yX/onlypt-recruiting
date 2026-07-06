@@ -2119,7 +2119,7 @@
 
 .traffic-period-switch {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
   padding: 5px;
   border: 1px solid rgba(24, 33, 31, 0.11);
@@ -2132,6 +2132,7 @@
   align-items: center;
   justify-content: center;
   min-height: 38px;
+  padding: 0 8px;
   border-radius: 8px;
   color: var(--ink-soft);
   font-size: 0.86rem;
@@ -2153,14 +2154,21 @@
 
 .traffic-range-form {
   display: grid;
-  gap: 9px;
-  padding: 14px;
-  border: 1px solid rgba(24, 33, 31, 0.11);
+  gap: 10px;
+  margin-top: -2px;
+  padding: 12px;
+  border: 1px solid rgba(29, 111, 103, 0.17);
   border-radius: 10px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 251, 0.78), rgba(255, 253, 246, 0.56)),
-    rgba(255, 255, 251, 0.42);
-  box-shadow: 0 12px 32px rgba(24, 33, 31, 0.05);
+    linear-gradient(135deg, rgba(220, 232, 227, 0.42), rgba(255, 253, 246, 0.68)),
+    rgba(255, 255, 251, 0.46);
+  box-shadow: 0 12px 30px rgba(24, 33, 31, 0.045);
+}
+
+.traffic-range-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .traffic-range-form label {

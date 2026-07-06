@@ -20,25 +20,30 @@
     <div class="admin-leads-summary admin-traffic-summary">
       <p class="admin-nav-label">Traffic window</p>
       <div class="traffic-period-switch" aria-label="Traffic period">
-        <a class="{{ 'active' if period == 'day' else '' }}" href="{{ url_for('admin_traffic', period='day') }}">Today</a>
-        <a class="{{ 'active' if period == 'week' else '' }}" href="{{ url_for('admin_traffic', period='week') }}">This week</a>
-        <a class="{{ 'active' if period == 'all' else '' }}" href="{{ url_for('admin_traffic', period='all') }}">All history</a>
+        <a class="{{ 'active' if period == 'day' else '' }}" href="{{ url_for('admin_traffic', period='day') }}" {% if period == 'day' %}aria-current="page"{% endif %}>Today</a>
+        <a class="{{ 'active' if period == 'week' else '' }}" href="{{ url_for('admin_traffic', period='week') }}" {% if period == 'week' %}aria-current="page"{% endif %}>This week</a>
+        <a class="{{ 'active' if period == 'all' else '' }}" href="{{ url_for('admin_traffic', period='all') }}" {% if period == 'all' %}aria-current="page"{% endif %}>All history</a>
+        <a class="{{ 'active' if period == 'range' else '' }}" href="{{ url_for('admin_traffic', period='range', start=traffic_filter.start, end=traffic_filter.end) }}" {% if period == 'range' %}aria-current="page"{% endif %}>Custom range</a>
       </div>
-      <form class="traffic-range-form" action="{{ url_for('admin_traffic') }}" method="get">
-        <input type="hidden" name="period" value="range">
-        <label>
-          <span>From</span>
-          <input type="date" name="start" value="{{ traffic_filter.start }}">
-        </label>
-        <label>
-          <span>To</span>
-          <input type="date" name="end" value="{{ traffic_filter.end }}">
-        </label>
-        <button type="submit">
-          <i data-lucide="calendar-search"></i>
-          Apply range
-        </button>
-      </form>
+      {% if period == 'range' %}
+        <form class="traffic-range-form" action="{{ url_for('admin_traffic') }}" method="get">
+          <input type="hidden" name="period" value="range">
+          <div class="traffic-range-fields">
+            <label>
+              <span>From</span>
+              <input type="date" name="start" value="{{ traffic_filter.start }}">
+            </label>
+            <label>
+              <span>To</span>
+              <input type="date" name="end" value="{{ traffic_filter.end }}">
+            </label>
+          </div>
+          <button type="submit">
+            <i data-lucide="calendar-search"></i>
+            Apply custom range
+          </button>
+        </form>
+      {% endif %}
       <div class="admin-leads-stat">
         <strong>{{ summary.totals.unique_visitors }}</strong>
         <span>unique visitors</span>
