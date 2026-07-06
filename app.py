@@ -92,6 +92,7 @@ CONTENT_PAGES = {
             cms_field("site.favicon", "Page tab icon", "", "favicon", "Page Tab"),
             cms_field("background.enabled", "Use uploaded site background", "off", "toggle", "Background"),
             cms_field("background.image", "Site background photo", "", "image", "Background"),
+            cms_field("layout.first_section_top", "First container top offset", "22", "range", "Layout"),
         ],
     },
     "email": {
@@ -711,6 +712,15 @@ def content_value(page_key: str, field_key: str, fallback: str | None = None) ->
     return page_values.get(field_key, default)
 
 
+def first_block_start_height() -> int:
+    raw_value = content_value("general", "layout.first_section_top", "22")
+    try:
+        value = int(float(str(raw_value).strip()))
+    except (TypeError, ValueError):
+        value = 22
+    return max(0, min(120, value))
+
+
 def editor_content_value(page_key: str, field_key: str, fallback: str | None = None) -> str:
     if page_key == "email":
         page_values = load_content_overrides().get("email", {})
@@ -951,6 +961,7 @@ def inject_site_context():
         "site_background_url": site_background_urls[0] if site_background_urls else "",
         "site_background_urls": site_background_urls,
         "site_favicon_url": favicon_url(),
+        "first_block_start_height": first_block_start_height(),
     }
 
 

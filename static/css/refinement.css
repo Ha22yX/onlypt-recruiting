@@ -7375,3 +7375,287 @@ main > section.cta-panel:focus-within .button.primary {
     order: 2;
   }
 }
+
+/* Header brand optical alignment: keep onlyPT centered when the subtitle is short or empty. */
+.site-header.site-header .brand {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0;
+}
+
+.site-header.site-header .brand > span {
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transform: translateY(1px);
+}
+
+.site-header.site-header .brand strong {
+  display: block;
+  line-height: 0.92;
+  font-weight: 800;
+  text-rendering: geometricPrecision;
+}
+
+.site-header.site-header .brand small {
+  line-height: 1;
+  margin-top: 4px;
+}
+
+.site-header.site-header .brand small:empty {
+  display: none;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .site-header.site-header .brand,
+  .site-header.site-header .brand > span {
+    min-height: 42px;
+  }
+
+  .site-header.site-header .brand > span {
+    transform: translateY(1px);
+  }
+}
+
+/* First-section alignment: page interiors should start at the same optical height as home. */
+main > .page-hero.page-hero,
+main > .page-hero.compact,
+main > .page-hero.story {
+  margin-top: 22px !important;
+  padding-top: clamp(54px, 7.2vw, 86px) !important;
+  align-content: start !important;
+}
+
+main > .page-hero.page-hero > .eyebrow:first-child,
+main > .page-hero.page-hero > .story-copy:first-child .eyebrow:first-child {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 900px) {
+  main > .page-hero.page-hero,
+  main > .page-hero.compact,
+  main > .page-hero.story {
+    margin-top: 16px !important;
+    padding-top: clamp(34px, 9vw, 48px) !important;
+  }
+}
+
+/* Home hero alignment: keep interior pages as-is and lower the homepage first block to match them. */
+main > .page-hero.page-hero,
+main > .page-hero.compact,
+main > .page-hero.story {
+  margin-top: revert !important;
+  padding-top: revert !important;
+  align-content: revert !important;
+}
+
+main > .hero.hero {
+  margin-top: 22px !important;
+  padding-top: clamp(78px, 9.2vw, 118px) !important;
+  align-items: start !important;
+}
+
+main > .hero.hero .hero-copy {
+  padding-top: clamp(14px, 2.2vw, 30px) !important;
+}
+
+@media (max-width: 900px) {
+  main > .page-hero.page-hero,
+  main > .page-hero.compact,
+  main > .page-hero.story {
+    margin-top: revert !important;
+    padding-top: revert !important;
+  }
+
+  main > .hero.hero {
+    margin-top: 16px !important;
+    padding-top: clamp(54px, 12vw, 76px) !important;
+  }
+
+  main > .hero.hero .hero-copy {
+    padding-top: 0 !important;
+  }
+}
+
+/* Final first-block alignment: use the midpoint between the original home height and the lower interior pages. */
+main > .hero.hero,
+main > .page-hero.page-hero,
+main > .page-hero.compact,
+main > .page-hero.story,
+main > .contact-layout.contact-layout {
+  margin-top: 22px !important;
+  padding-top: clamp(66px, 8.2vw, 98px) !important;
+  align-content: start !important;
+  align-items: start !important;
+}
+
+main > .hero.hero .hero-copy,
+main > .page-hero.page-hero > .eyebrow:first-child,
+main > .page-hero.page-hero > .story-copy:first-child .eyebrow:first-child {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+@media (max-width: 900px) {
+  main > .hero.hero,
+  main > .page-hero.page-hero,
+  main > .page-hero.compact,
+  main > .page-hero.story,
+  main > .contact-layout.contact-layout {
+    margin-top: 16px !important;
+    padding-top: clamp(44px, 10vw, 62px) !important;
+  }
+}
+
+/* First-block midpoint calibration: move the unified start lower than the prior top-biased pass. */
+main > .hero.hero,
+main > .page-hero.page-hero,
+main > .page-hero.compact,
+main > .page-hero.story,
+main > .contact-layout.contact-layout {
+  margin-top: 22px !important;
+  padding-top: clamp(86px, 9.6vw, 118px) !important;
+  align-content: start !important;
+  align-items: start !important;
+}
+
+main > .hero.hero .hero-copy {
+  padding-top: clamp(8px, 1.2vw, 18px) !important;
+  margin-top: 0 !important;
+}
+
+main > .page-hero.page-hero > .eyebrow:first-child,
+main > .page-hero.page-hero > .story-copy:first-child .eyebrow:first-child {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 900px) {
+  main > .hero.hero,
+  main > .page-hero.page-hero,
+  main > .page-hero.compact,
+  main > .page-hero.story,
+  main > .contact-layout.contact-layout {
+    margin-top: 16px !important;
+    padding-top: clamp(56px, 13vw, 78px) !important;
+  }
+
+  main > .hero.hero .hero-copy {
+    padding-top: 0 !important;
+  }
+}
+
+
+/* Admin-controlled first-block start height. */
+main > .hero.hero,
+main > .page-hero.page-hero,
+main > .page-hero.compact,
+main > .page-hero.story,
+main > .contact-layout.contact-layout {
+  margin-top: 22px !important;
+  padding-top: var(--first-block-start, 86px) !important;
+  align-content: start !important;
+  align-items: start !important;
+}
+
+main > .hero.hero .hero-copy {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+@media (max-width: 900px) {
+  main > .hero.hero,
+  main > .page-hero.page-hero,
+  main > .page-hero.compact,
+  main > .page-hero.story,
+  main > .contact-layout.contact-layout {
+    margin-top: 16px !important;
+    padding-top: clamp(44px, calc(var(--first-block-start, 86px) - 30px), 92px) !important;
+  }
+}
+
+/* Admin-controlled first container position. The slider moves the block itself, not the text inside it. */
+main > .hero.hero,
+main > .page-hero.page-hero,
+main > .page-hero.compact,
+main > .page-hero.story,
+main > .contact-layout.contact-layout {
+  margin-top: var(--first-block-start, 22px) !important;
+  padding-top: clamp(54px, 7.2vw, 86px) !important;
+  align-content: start !important;
+  align-items: start !important;
+}
+
+main > .hero.hero .hero-copy {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+main > .page-hero.page-hero > .eyebrow:first-child,
+main > .page-hero.page-hero > .story-copy:first-child .eyebrow:first-child {
+  margin-top: 0 !important;
+}
+
+@media (max-width: 900px) {
+  main > .hero.hero,
+  main > .page-hero.page-hero,
+  main > .page-hero.compact,
+  main > .page-hero.story,
+  main > .contact-layout.contact-layout {
+    margin-top: clamp(8px, var(--first-block-start, 22px), 88px) !important;
+    padding-top: clamp(34px, 9vw, 52px) !important;
+  }
+}
+
+/* Prevent large Newsreader hero glyphs from clipping at the top of their line box. */
+main > .hero.hero {
+  overflow: visible !important;
+}
+
+main > .hero.hero .hero-copy {
+  overflow: visible !important;
+}
+
+main > .hero.hero h1 {
+  line-height: 0.96 !important;
+  padding-top: 0.08em !important;
+  margin-top: -0.08em !important;
+  overflow: visible !important;
+}
+
+@media (max-width: 900px) {
+  main > .hero.hero h1 {
+    line-height: 0.98 !important;
+    padding-top: 0.06em !important;
+    margin-top: -0.06em !important;
+  }
+}
+
+/* Restore first-block text start while keeping the container offset slider active. */
+main > .hero.hero .hero-copy {
+  padding-top: initial !important;
+  margin-top: initial !important;
+  overflow: visible !important;
+}
+
+main > .hero.hero h1 {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+  line-height: 0.98 !important;
+  overflow: visible !important;
+}
+
+main > .page-hero.page-hero > .eyebrow:first-child,
+main > .page-hero.page-hero > .story-copy:first-child .eyebrow:first-child {
+  margin-top: initial !important;
+}
+
+@media (max-width: 900px) {
+  main > .hero.hero h1 {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+    line-height: 1 !important;
+  }
+}

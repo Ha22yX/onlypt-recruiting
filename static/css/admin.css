@@ -1966,3 +1966,32 @@
     width: 100%;
   }
 }
+
+
+.admin-range-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.admin-range-control input[type="range"] {
+  width: 100%;
+  accent-color: #2c6f65;
+}
+
+.admin-range-control output {
+  min-width: 58px;
+  padding: 7px 9px;
+  border: 1px solid rgba(23, 32, 29, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 253, 246, 0.72);
+  color: #17201d;
+  font-weight: 800;
+  text-align: center;
+}
+
+.admin-range-control small {
+  grid-column: 1 / -1;
+  color: rgba(23, 32, 29, 0.62);
+}

@@ -27,7 +27,17 @@
   let activeInput = null;
   let currentInputs = [];
   let saveFeedbackTimer = null;
+  let directSaveTimer = null;
   let lastPreviewBackgroundSignature = "";
+  const firstBlockHeightKey = "layout.first_section_top";
+
+  const normalizeFirstBlockHeight = (value) => {
+    const parsed = Number.parseInt(String(value || "22"), 10);
+    if (Number.isNaN(parsed)) {
+      return 22;
+    }
+    return Math.max(0, Math.min(120, parsed));
+  };
 
   const setStatus = (message, state = "") => {
     if (!status) {
@@ -444,6 +454,16 @@
     lastPreviewBackgroundSignature = signature;
   };
 
+  const applyFirstBlockHeightToPreview = (value = pages.general?.values?.[firstBlockHeightKey] || "86") => {
+    const doc = previewDocument();
+    if (!doc) {
+      return;
+    }
+    const nextValue = `${normalizeFirstBlockHeight(value)}px`;
+    doc.documentElement.style.setProperty("--first-block-start", nextValue);
+    doc.body?.style.setProperty("--first-block-start", nextValue);
+  };
+
   const activatePracticePreviewCard = (fieldKey) => {
     if (pageKey !== "employers") {
       return false;
@@ -512,9 +532,16 @@
     }
 
     pages[pageKey].values[input.dataset.cmsKey] = getInputValue(input);
+    if (input.type === "range") {
+      const output = input.closest(".admin-range-control")?.querySelector("output");
+      if (output) output.textContent = `${normalizeFirstBlockHeight(getInputValue(input))}px`;
+    }
     getPreviewTargets(input.dataset.cmsKey).forEach((target) => {
       applyValueToTarget(target, getInputValue(input));
     });
+    if (pageKey === "general" && input.dataset.cmsKey === firstBlockHeightKey) {
+      applyFirstBlockHeightToPreview(getInputValue(input));
+    }
     if (pageKey === "general" && input.dataset.cmsKey.startsWith("background.")) {
       applyBackgroundToPreview();
     }
@@ -543,6 +570,8 @@
     if (!doc) {
       return;
     }
+
+    applyFirstBlockHeightToPreview();
 
     if (!doc.querySelector("#cms-preview-highlight-style")) {
       const style = doc.createElement("style");
@@ -607,7 +636,44 @@
     setStatus("Editing target highlighted in the preview.", "");
   };
 
+  const saveDirectField = async (input) => {
+    if (!input || !pages[pageKey]) {
+      return;
+    }
+    const targetPageKey = pageKey;
+    const fieldKey = input.dataset.cmsKey;
+    const values = { [fieldKey]: getInputValue(input) };
+    setStatus("Saving height...", "");
+    try {
+      const response = await fetch(pages[targetPageKey].saveUrl, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ values }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "Save failed.");
+      }
+      pages[targetPageKey].values = payload.values;
+      setStatus("First block height saved.", "success");
+    } catch (error) {
+      setStatus(error.message || "Could not save height.", "error");
+    }
+  };
+
+  const scheduleDirectFieldSave = (input) => {
+    if (directSaveTimer) {
+      window.clearTimeout(directSaveTimer);
+    }
+    directSaveTimer = window.setTimeout(() => saveDirectField(input), 260);
+  };
+
   const fieldHint = (field) => {
+    if (pageKey === "general" && field.key === firstBlockHeightKey) {
+      return "Moves the first container block up or down across every public page. Preview updates while sliding and saves automatically.";
+    }
+
     if (pageKey !== "email") {
       return "";
     }
@@ -703,6 +769,16 @@
           <small data-upload-status>Upload an ICO, PNG, SVG, or WebP icon for the browser tab.</small>
         </span>
       `;
+    } else if (field.type === "range") {
+      const normalizedValue = normalizeFirstBlockHeight(value);
+      const isFirstBlockRange = field.key === firstBlockHeightKey;
+      control = `
+        <span class="admin-range-control">
+          <input data-editor-input data-cms-key="${escapeHtml(field.key)}" ${isFirstBlockRange ? 'data-direct-save="true"' : ""} type="range" min="0" max="120" step="2" value="${escapeHtml(normalizedValue)}">
+          <output>${escapeHtml(normalizedValue)}px</output>
+          <small>0px - 120px from the navigation. This setting is saved automatically.</small>
+        </span>
+      `;
     } else if (field.type === "password") {
       control = `<input data-editor-input data-cms-key="${escapeHtml(field.key)}" type="password" autocomplete="new-password" value="${escapeHtml(value)}">`;
     } else {
@@ -755,9 +831,17 @@
     fieldList.querySelectorAll("[data-image-preview-list]").forEach(observeBackgroundThumbs);
 
     currentInputs.forEach((input) => {
-      input.addEventListener("input", () => syncField(input));
+      input.addEventListener("input", () => {
+        syncField(input);
+        if (input.dataset.directSave === "true") {
+          scheduleDirectFieldSave(input);
+        }
+      });
       input.addEventListener("change", () => {
         syncField(input);
+        if (input.dataset.directSave === "true") {
+          scheduleDirectFieldSave(input);
+        }
         const toggleLabel = input.closest(".admin-toggle-control")?.querySelector("strong");
         if (toggleLabel) {
           toggleLabel.textContent = input.checked ? "Enabled" : "Disabled";

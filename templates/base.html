@@ -30,14 +30,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,650&display=swap" rel="stylesheet">
     {% if site_favicon_url %}<link rel="icon" href="{{ site_favicon_url }}">{% endif %}
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v=20260704-brand-favicon1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260609-static-bg1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/refinement.css') }}?v=20260704-firstblock-container-offset1">
     {% block extra_head %}{% endblock %}
     <script src="https://unpkg.com/lucide@latest" defer></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v=20260609-static-bg1" defer></script>
   </head>
   <body
     class="{{ 'site-background-enabled' if site_background_enabled else '' }}"
-    {% if site_background_enabled %}style="--site-bg-image: url('{{ site_background_url }}');"{% endif %}
+    style="--first-block-start: {{ first_block_start_height }}px;{% if site_background_enabled %} --site-bg-image: url('{{ site_background_url }}');{% endif %}"
   >
     <svg class="liquid-glass-defs" aria-hidden="true" focusable="false">
       <filter id="liquid-glass-mask-filter" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
@@ -105,8 +105,7 @@
     <footer class="site-footer">
       <div>
         <a class="brand footer-brand" href="{{ url_for('home') }}">
-          <span class="brand-mark">PT</span>
-          <span>
+            <span>
             <strong {{ cms_attrs('general', 'brand.name') }}>{{ cms_text('general', 'brand.name') }}</strong>
             <small {{ cms_attrs('general', 'brand.subtitle') }}>{{ cms_text('general', 'brand.subtitle') }}</small>
           </span>
