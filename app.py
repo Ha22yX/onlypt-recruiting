@@ -566,41 +566,6 @@ def email_domain(address: str) -> str:
     return address.rsplit("@", 1)[1].strip().lower()
 
 
-DIRECT_MX_FALLBACKS = {
-    "qq.com": ["mx3.qq.com", "mx2.qq.com", "mx1.qq.com"],
-    "vip.qq.com": ["mx3.qq.com", "mx2.qq.com", "mx1.qq.com"],
-}
-
-
-def send_direct_mx_fallback(message: EmailMessage, sender_email: str, recipients: list[str]) -> bool:
-    recipient_groups: dict[str, list[str]] = {}
-    for recipient in recipients:
-        domain = email_domain(recipient)
-        if domain not in DIRECT_MX_FALLBACKS:
-            return False
-        recipient_groups.setdefault(domain, []).append(recipient)
-
-    helo_domain = email_domain(sender_email) or "localhost"
-    for domain, domain_recipients in recipient_groups.items():
-        delivered = False
-        last_error = ""
-        for mx_host in DIRECT_MX_FALLBACKS[domain]:
-            try:
-                with smtplib.SMTP(mx_host, 25, timeout=15) as smtp:
-                    smtp.ehlo(helo_domain)
-                    smtp.send_message(message, from_addr=sender_email, to_addrs=domain_recipients)
-                delivered = True
-                break
-            except (OSError, smtplib.SMTPException) as error:
-                last_error = str(error)
-
-        if not delivered:
-            log_notification_error(f"Direct MX email fallback failed for {domain}: {last_error}")
-            return False
-
-    return True
-
-
 def email_rate_has_slot(current_time: float | None = None) -> bool:
     current_time = current_time or now_timestamp()
     rate_data = load_json_file(EMAIL_RATE_FILE, {"sent_at": []})
@@ -829,9 +794,6 @@ def send_lead_email_now(form_data: dict[str, str]) -> bool:
                 smtp.send_message(message, from_addr=sender_email, to_addrs=recipients)
     except (OSError, smtplib.SMTPException) as error:
         log_notification_error(f"SMTP email notification failed: {error}")
-        if send_direct_mx_fallback(message, sender_email, recipients):
-            log_notification_error("SMTP email notification failed, but direct MX fallback delivered the message.")
-            return True
         return False
 
     return True
