@@ -445,7 +445,10 @@ def lookup_ip_region(ip_value: str) -> dict[str, str]:
         log_notification_error(f"IP region lookup failed for {ip_value}: {error}")
 
     cache[ip_value] = region
-    write_json_file(IP_REGION_CACHE_FILE, cache)
+    try:
+        write_json_file(IP_REGION_CACHE_FILE, cache)
+    except OSError as error:
+        log_notification_error(f"IP region cache write failed: {error}")
     return region
 
 
@@ -466,9 +469,12 @@ def traffic_device_type(user_agent: str) -> str:
 
 
 def append_traffic_event(event: dict[str, object]) -> None:
-    TRAFFIC_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with TRAFFIC_LOG_FILE.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
+    try:
+        TRAFFIC_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with TRAFFIC_LOG_FILE.open("a", encoding="utf-8") as file:
+            file.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
+    except OSError as error:
+        log_notification_error(f"Traffic event write failed: {error}")
 
 
 def base_traffic_event(event_type: str) -> dict[str, object]:
@@ -772,7 +778,10 @@ def process_scheduled_traffic_reports(reference: datetime | None = None) -> int:
                 state["weekly_last_sent"] = weekly_key
                 sent_count += 1
 
-    write_json_file(TRAFFIC_REPORT_STATE_FILE, state)
+    try:
+        write_json_file(TRAFFIC_REPORT_STATE_FILE, state)
+    except OSError as error:
+        log_notification_error(f"Traffic report state write failed: {error}")
     return sent_count
 
 
