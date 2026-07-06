@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import html
+import ipaddress
 import json
 import os
 import smtplib
@@ -10,11 +11,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from base64 import b64encode
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime, formataddr, getaddresses, make_msgid, parseaddr
 from functools import wraps
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 from markupsafe import Markup, escape
@@ -30,6 +32,9 @@ NOTIFICATIONS_LOG_FILE = Path(app.instance_path) / "notification_errors.log"
 SUBMISSION_LIMIT_FILE = Path(app.instance_path) / "submission_limits.json"
 EMAIL_RATE_FILE = Path(app.instance_path) / "email_rate.json"
 EMAIL_QUEUE_FILE = Path(app.instance_path) / "email_queue.json"
+TRAFFIC_LOG_FILE = Path(app.instance_path) / "traffic_events.jsonl"
+IP_REGION_CACHE_FILE = Path(app.instance_path) / "ip_region_cache.json"
+TRAFFIC_REPORT_STATE_FILE = Path(app.instance_path) / "traffic_report_state.json"
 PAGE_EDITS_DIR = Path(app.instance_path) / "page_edits"
 CONTENT_FILE = Path(app.instance_path) / "content_overrides.json"
 UPLOAD_DIR = Path(app.instance_path) / "uploads"
@@ -37,6 +42,10 @@ BACKGROUND_UPLOAD_DIR = UPLOAD_DIR / "backgrounds"
 FAVICON_UPLOAD_DIR = UPLOAD_DIR / "favicons"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
+try:
+    SITE_TIMEZONE = ZoneInfo(os.environ.get("ONLYPT_SITE_TIMEZONE", "America/New_York"))
+except ZoneInfoNotFoundError:
+    SITE_TIMEZONE = timezone.utc
 ALLOWED_BACKGROUND_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 ALLOWED_FAVICON_EXTENSIONS = {"ico", "png", "svg", "webp"}
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
@@ -50,6 +59,7 @@ EMAIL_SUBMISSION_WINDOW_SECONDS = 60 * 60
 GLOBAL_EMAIL_LIMIT = 2
 GLOBAL_EMAIL_WINDOW_SECONDS = 60
 MAX_EMAIL_QUEUE_ATTEMPTS = 6
+PUBLIC_TRAFFIC_ENDPOINTS = {"home", "employers", "therapists", "about", "contact"}
 
 EDITABLE_PAGES = {
     "home": {"label": "Home", "endpoint": "home", "template": "index.html"},
@@ -118,6 +128,9 @@ CONTENT_PAGES = {
             cms_field("lead_email.smtp_security", "SMTP security", "ssl", group="SMTP access"),
             cms_field("lead_email.smtp_username", "SMTP username", "", group="SMTP access"),
             cms_field("lead_email.smtp_password", "SMTP password", "", "password", "SMTP access"),
+            cms_field("traffic_report.daily_enabled", "Send daily traffic report", "off", "toggle", "Traffic reports"),
+            cms_field("traffic_report.weekly_enabled", "Send weekly traffic report", "off", "toggle", "Traffic reports"),
+            cms_field("traffic_report.to", "Traffic report recipient", "", group="Traffic reports"),
         ],
     },
     "home": {
@@ -352,11 +365,422 @@ def write_json_file(path: Path, data) -> None:
         json.dump(data, file, ensure_ascii=False, indent=2)
 
 
+def parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
 def client_ip_address() -> str:
     forwarded_for = request.headers.get("X-Forwarded-For", "")
     if forwarded_for:
         return forwarded_for.split(",", 1)[0].strip()
     return request.remote_addr or "unknown"
+
+
+def is_public_ip(ip_value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(ip_value)
+    except ValueError:
+        return False
+    return not (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_multicast
+        or address.is_unspecified
+    )
+
+
+def lookup_ip_region(ip_value: str) -> dict[str, str]:
+    if not is_public_ip(ip_value):
+        return {
+            "ip": ip_value,
+            "country": "Local",
+            "region": "",
+            "city": "",
+            "timezone": "",
+            "isp": "",
+            "source": "local",
+        }
+
+    cache = load_json_file(IP_REGION_CACHE_FILE, {})
+    cached = cache.get(ip_value)
+    if isinstance(cached, dict) and cached.get("country") is not None:
+        return cached
+
+    region = {
+        "ip": ip_value,
+        "country": "Unknown",
+        "region": "",
+        "city": "",
+        "timezone": "",
+        "isp": "",
+        "source": "unresolved",
+    }
+    try:
+        query = urllib.parse.quote(ip_value)
+        endpoint = (
+            f"http://ip-api.com/json/{query}"
+            "?fields=status,country,regionName,city,timezone,isp,query,message"
+        )
+        with urllib.request.urlopen(endpoint, timeout=1.6) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if payload.get("status") == "success":
+            region = {
+                "ip": str(payload.get("query") or ip_value),
+                "country": str(payload.get("country") or "Unknown"),
+                "region": str(payload.get("regionName") or ""),
+                "city": str(payload.get("city") or ""),
+                "timezone": str(payload.get("timezone") or ""),
+                "isp": str(payload.get("isp") or ""),
+                "source": "ip-api",
+            }
+    except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        log_notification_error(f"IP region lookup failed for {ip_value}: {error}")
+
+    cache[ip_value] = region
+    write_json_file(IP_REGION_CACHE_FILE, cache)
+    return region
+
+
+def traffic_visitor_id(ip_value: str, user_agent: str) -> str:
+    raw = f"{ip_value}|{user_agent}".encode("utf-8", errors="ignore")
+    return hashlib.sha1(raw).hexdigest()[:16]
+
+
+def traffic_device_type(user_agent: str) -> str:
+    value = user_agent.lower()
+    if any(marker in value for marker in ("bot", "crawler", "spider", "preview")):
+        return "Bot"
+    if "ipad" in value or "tablet" in value:
+        return "Tablet"
+    if any(marker in value for marker in ("mobile", "iphone", "android")):
+        return "Mobile"
+    return "Desktop"
+
+
+def append_traffic_event(event: dict[str, object]) -> None:
+    TRAFFIC_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with TRAFFIC_LOG_FILE.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
+
+
+def base_traffic_event(event_type: str) -> dict[str, object]:
+    ip_value = client_ip_address()
+    user_agent = request.headers.get("User-Agent", "")
+    region = lookup_ip_region(ip_value)
+    return {
+        "type": event_type,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "path": request.path,
+        "endpoint": request.endpoint or "",
+        "method": request.method,
+        "ip": ip_value,
+        "visitor_id": traffic_visitor_id(ip_value, user_agent),
+        "user_agent": user_agent[:500],
+        "device": traffic_device_type(user_agent),
+        "referrer": request.headers.get("Referer", "")[:500],
+        "region": region,
+    }
+
+
+def should_record_page_view(response) -> bool:
+    return (
+        request.method == "GET"
+        and response.status_code < 400
+        and request.endpoint in PUBLIC_TRAFFIC_ENDPOINTS
+        and request.args.get("admin_preview") != "1"
+        and not request.path.startswith(("/admin", "/dev", "/static", "/uploads"))
+    )
+
+
+def record_form_submission_event(form_data: dict[str, str]) -> None:
+    event = base_traffic_event("form_submission")
+    event["form"] = {
+        "audience": form_data.get("audience", ""),
+        "email_domain": email_domain(form_data.get("email", "")),
+        "has_phone": bool(form_data.get("phone", "").strip()),
+    }
+    append_traffic_event(event)
+
+
+def iter_traffic_events(start: datetime | None = None, end: datetime | None = None) -> list[dict[str, object]]:
+    if not TRAFFIC_LOG_FILE.exists():
+        return []
+
+    events: list[dict[str, object]] = []
+    with TRAFFIC_LOG_FILE.open("r", encoding="utf-8") as file:
+        for line in file:
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            created_at = parse_iso_datetime(str(event.get("created_at", "")))
+            if created_at is None:
+                continue
+            if start and created_at < start:
+                continue
+            if end and created_at >= end:
+                continue
+            events.append(event)
+    return events
+
+
+def period_bounds(period: str, reference: datetime | None = None) -> tuple[datetime, datetime]:
+    reference = reference or datetime.now(SITE_TIMEZONE)
+    reference = reference.astimezone(SITE_TIMEZONE)
+    day_start = reference.replace(hour=0, minute=0, second=0, microsecond=0)
+    if period == "week":
+        start = day_start.replace(day=day_start.day) - timedelta(days=day_start.weekday())
+        return start.astimezone(timezone.utc), (start + timedelta(days=7)).astimezone(timezone.utc)
+    return day_start.astimezone(timezone.utc), (day_start + timedelta(days=1)).astimezone(timezone.utc)
+
+
+def count_by(events: list[dict[str, object]], key_fn, limit: int = 10) -> list[dict[str, object]]:
+    counts: dict[str, int] = {}
+    for event in events:
+        key = key_fn(event) or "Unknown"
+        counts[str(key)] = counts.get(str(key), 0) + 1
+    return [
+        {"label": label, "count": count}
+        for label, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:limit]
+    ]
+
+
+def mask_ip(ip_value: str) -> str:
+    try:
+        address = ipaddress.ip_address(ip_value)
+    except ValueError:
+        return "Unknown"
+    if address.version == 4:
+        parts = ip_value.split(".")
+        if len(parts) == 4:
+            return ".".join([parts[0], parts[1], parts[2], "*"])
+    return f"{address.compressed[:12]}..."
+
+
+def summarize_traffic(start: datetime, end: datetime) -> dict[str, object]:
+    events = iter_traffic_events(start, end)
+    page_views = [event for event in events if event.get("type") == "page_view"]
+    form_submissions = [event for event in events if event.get("type") == "form_submission"]
+    visitors = {str(event.get("visitor_id", "")) for event in events if event.get("visitor_id")}
+    page_visitors = {str(event.get("visitor_id", "")) for event in page_views if event.get("visitor_id")}
+    enriched_recent: list[dict[str, object]] = []
+    for event in reversed(events[-80:]):
+        created_at = parse_iso_datetime(str(event.get("created_at", "")))
+        region = event.get("region") or {}
+        location = ", ".join(
+            part
+            for part in [
+                str(region.get("city", "")),
+                str(region.get("region", "")),
+                str(region.get("country", "")),
+            ]
+            if part
+        )
+        item = dict(event)
+        item["local_time"] = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M") if created_at else "-"
+        item["location_label"] = location or "Unknown"
+        item["ip_label"] = mask_ip(str(event.get("ip", "")))
+        enriched_recent.append(item)
+
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "events": events,
+        "totals": {
+            "page_views": len(page_views),
+            "unique_visitors": len(visitors),
+            "unique_page_visitors": len(page_visitors),
+            "form_submissions": len(form_submissions),
+            "conversion_rate": round((len(form_submissions) / len(page_visitors) * 100), 1) if page_visitors else 0,
+        },
+        "pages": count_by(page_views, lambda event: event.get("path"), 12),
+        "regions": count_by(
+            events,
+            lambda event: ", ".join(
+                part
+                for part in [
+                    (event.get("region") or {}).get("city", ""),
+                    (event.get("region") or {}).get("region", ""),
+                    (event.get("region") or {}).get("country", ""),
+                ]
+                if part
+            ),
+            12,
+        ),
+        "countries": count_by(events, lambda event: (event.get("region") or {}).get("country", ""), 10),
+        "devices": count_by(events, lambda event: event.get("device", ""), 5),
+        "referrers": count_by(events, lambda event: event.get("referrer") or "Direct", 10),
+        "recent": enriched_recent,
+    }
+
+
+def traffic_period_label(start: datetime, end: datetime) -> str:
+    local_start = start.astimezone(SITE_TIMEZONE)
+    local_end = (end - timedelta(seconds=1)).astimezone(SITE_TIMEZONE)
+    if (end - start).days >= 7:
+        return f"{local_start.strftime('%Y-%m-%d')} to {local_end.strftime('%Y-%m-%d')}"
+    return local_start.strftime("%Y-%m-%d")
+
+
+def traffic_report_subject(period: str, start: datetime, end: datetime) -> str:
+    label = "Weekly" if period == "week" else "Daily"
+    return f"{label} onlyPT traffic report - {traffic_period_label(start, end)}"
+
+
+def build_traffic_report(period: str, reference: datetime | None = None) -> dict[str, str]:
+    start, end = period_bounds(period, reference)
+    summary = summarize_traffic(start, end)
+    totals = summary["totals"]
+    period_name = "Weekly" if period == "week" else "Daily"
+    period_label = traffic_period_label(start, end)
+
+    def lines_for_table(title: str, rows: list[dict[str, object]]) -> list[str]:
+        output = [title]
+        if not rows:
+            output.append("- No data")
+            return output
+        output.extend(f"- {row['label']}: {row['count']}" for row in rows)
+        return output
+
+    text_lines = [
+        f"{period_name} onlyPT traffic report",
+        period_label,
+        "",
+        f"Page views: {totals['page_views']}",
+        f"Unique visitors: {totals['unique_visitors']}",
+        f"Form submissions: {totals['form_submissions']}",
+        f"Conversion rate: {totals['conversion_rate']}%",
+        "",
+        *lines_for_table("Top pages", summary["pages"]),
+        "",
+        *lines_for_table("Top regions", summary["regions"]),
+        "",
+        *lines_for_table("Devices", summary["devices"]),
+        "",
+        *lines_for_table("Referrers", summary["referrers"]),
+    ]
+    text_body = "\n".join(text_lines)
+
+    def html_rows(rows: list[dict[str, object]]) -> str:
+        if not rows:
+            return '<tr><td colspan="2" style="padding:12px;color:#5f6d68;">No data</td></tr>'
+        return "\n".join(
+            f"""
+            <tr>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(row['label']))}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{row['count']}</td>
+            </tr>
+            """
+            for row in rows
+        )
+
+    def table_block(title: str, rows: list[dict[str, object]]) -> str:
+        return f"""
+        <h2 style="margin:26px 0 10px;font-family:Arial,sans-serif;font-size:16px;line-height:1.3;color:#18211f;">{html.escape(title)}</h2>
+        <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#fffffb;border:1px solid #e4e9e5;border-radius:8px;overflow:hidden;">
+          {html_rows(rows)}
+        </table>
+        """
+
+    html_body = f"""<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body style="margin:0;padding:0;background:#f7f5ee;color:#18211f;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f7f5ee;border-collapse:collapse;">
+      <tr>
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:760px;background:#fffffb;border:1px solid #dce8e3;border-radius:8px;overflow:hidden;">
+            <tr>
+              <td style="padding:28px 30px;background:#fffffb;border-bottom:1px solid #dce8e3;">
+                <div style="font-family:Georgia,serif;font-size:30px;font-weight:700;color:#18211f;">onlyPT</div>
+                <p style="margin:10px 0 0;font-family:Arial,sans-serif;font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:#1d6f67;">{html.escape(period_name)} traffic report</p>
+                <h1 style="margin:18px 0 0;font-family:Georgia,serif;font-size:34px;line-height:1.05;color:#18211f;">{html.escape(period_label)}</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 30px 30px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+                  <tr>
+                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Page views</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['page_views']}</strong></td>
+                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Unique visitors</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['unique_visitors']}</strong></td>
+                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Form submissions</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['form_submissions']}</strong></td>
+                    <td style="padding:14px;background:#f7f5ee;border:1px solid #e4e9e5;"><small style="display:block;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;">Conversion</small><strong style="display:block;margin-top:7px;font-family:Georgia,serif;font-size:30px;">{totals['conversion_rate']}%</strong></td>
+                  </tr>
+                </table>
+                {table_block("Top pages", summary["pages"])}
+                {table_block("Top regions", summary["regions"])}
+                {table_block("Devices", summary["devices"])}
+                {table_block("Referrers", summary["referrers"])}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
+
+    return {
+        "subject": traffic_report_subject(period, start, end),
+        "text": text_body,
+        "html": html_body,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+    }
+
+
+def send_traffic_report(period: str, reference: datetime | None = None) -> bool:
+    config = traffic_report_config()
+    if period == "day" and config["daily_enabled"] != "on":
+        return False
+    if period == "week" and config["weekly_enabled"] != "on":
+        return False
+    report = build_traffic_report(period, reference)
+    return send_smtp_email(report["subject"], report["text"], report["html"], config["to"])
+
+
+def process_scheduled_traffic_reports(reference: datetime | None = None) -> int:
+    reference = reference or datetime.now(timezone.utc)
+    local_reference = reference.astimezone(SITE_TIMEZONE)
+    state = load_json_file(TRAFFIC_REPORT_STATE_FILE, {})
+    sent_count = 0
+
+    yesterday = reference - timedelta(days=1)
+    daily_start, _daily_end = period_bounds("day", yesterday)
+    daily_key = daily_start.strftime("%Y-%m-%d")
+    if state.get("daily_last_sent") != daily_key and local_reference.hour >= 1:
+        if send_traffic_report("day", yesterday):
+            state["daily_last_sent"] = daily_key
+            sent_count += 1
+
+    if local_reference.weekday() == 0 and local_reference.hour >= 2:
+        previous_week = reference - timedelta(days=7)
+        weekly_start, _weekly_end = period_bounds("week", previous_week)
+        weekly_key = weekly_start.strftime("%Y-%m-%d")
+        if state.get("weekly_last_sent") != weekly_key:
+            if send_traffic_report("week", previous_week):
+                state["weekly_last_sent"] = weekly_key
+                sent_count += 1
+
+    write_json_file(TRAFFIC_REPORT_STATE_FILE, state)
+    return sent_count
+
+
+def run_scheduled_jobs() -> dict[str, int]:
+    return {
+        "queued_emails_sent": process_email_queue(),
+        "traffic_reports_sent": process_scheduled_traffic_reports(),
+    }
 
 
 def normalized_form_email() -> str:
@@ -670,6 +1094,64 @@ def lead_email_config() -> dict[str, str]:
         "smtp_username": email_setting("lead_email.smtp_username"),
         "smtp_password": email_setting("lead_email.smtp_password"),
     }
+
+
+def traffic_report_config() -> dict[str, str]:
+    email_values = load_content_overrides().get("email", {})
+    return {
+        "daily_enabled": str(email_values.get("traffic_report.daily_enabled", "off")).strip().lower(),
+        "weekly_enabled": str(email_values.get("traffic_report.weekly_enabled", "off")).strip().lower(),
+        "to": str(email_values.get("traffic_report.to", "")).strip(),
+    }
+
+
+def send_smtp_email(subject: str, text_body: str, html_body: str, to_override: str = "") -> bool:
+    config = lead_email_config()
+    if config["enabled"] != "on":
+        return False
+
+    sender_email = email_address(config["from_email"])
+    smtp_username = email_address(config["smtp_username"])
+    recipients = email_recipients(to_override or config["to"])
+    required = ["smtp_host", "smtp_port", "smtp_password"]
+    if not sender_email or not smtp_username or not recipients or not all(config.get(key) for key in required):
+        log_notification_error("SMTP email notification is enabled but required settings are missing.")
+        return False
+
+    try:
+        port = int(config["smtp_port"])
+    except ValueError:
+        log_notification_error(f"SMTP email notification has invalid port: {config['smtp_port']}")
+        return False
+
+    message = EmailMessage()
+    sender_name = config["from_name"]
+    sender_domain = email_domain(sender_email)
+    message["Subject"] = subject
+    message["From"] = formataddr((sender_name, sender_email))
+    message["To"] = ", ".join(recipients)
+    message["Date"] = format_datetime(datetime.now(timezone.utc))
+    message["Message-ID"] = make_msgid(domain=sender_domain or None)
+    message["X-Auto-Response-Suppress"] = "All"
+    message.set_content(text_body)
+    message.add_alternative(html_body, subtype="html")
+
+    try:
+        if config["smtp_security"] == "ssl":
+            with smtplib.SMTP_SSL(config["smtp_host"], port, timeout=10) as smtp:
+                smtp.login(smtp_username, config["smtp_password"])
+                smtp.send_message(message, from_addr=sender_email, to_addrs=recipients)
+        else:
+            with smtplib.SMTP(config["smtp_host"], port, timeout=10) as smtp:
+                if config["smtp_security"] in {"tls", "starttls"}:
+                    smtp.starttls()
+                smtp.login(smtp_username, config["smtp_password"])
+                smtp.send_message(message, from_addr=sender_email, to_addrs=recipients)
+    except (OSError, smtplib.SMTPException) as error:
+        log_notification_error(f"SMTP email notification failed: {error}")
+        return False
+
+    return True
 
 
 def lead_email_html(form_data: dict[str, str]) -> str:
@@ -1140,6 +1622,11 @@ def inject_site_context():
 
 @app.after_request
 def add_dev_editor_headers(response):
+    if should_record_page_view(response):
+        event = base_traffic_event("page_view")
+        event["status_code"] = response.status_code
+        append_traffic_event(event)
+
     if request.path.startswith("/dev/") or request.path.startswith("/admin") or request.args.get("admin_preview") == "1":
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
         response.headers["Cache-Control"] = "no-store"
@@ -1181,6 +1668,7 @@ def contact():
 
         lead_data = request.form.to_dict()
         write_lead(lead_data)
+        record_form_submission_event(lead_data)
         notify_lead_email(lead_data)
         notify_lead_whatsapp(lead_data)
         flash(cms_text("contact", "flash.success"), "success")
@@ -1249,6 +1737,25 @@ def admin_content_index():
 def admin_leads():
     leads = read_leads()
     return render_template("admin_leads.html", page="admin-leads", leads=leads)
+
+
+@app.get("/admin/traffic")
+@admin_required
+def admin_traffic():
+    period = request.args.get("period", "day")
+    if period not in {"day", "week"}:
+        period = "day"
+    start, end = period_bounds(period)
+    summary = summarize_traffic(start, end)
+    report_config = traffic_report_config()
+    return render_template(
+        "admin_traffic.html",
+        page="admin-traffic",
+        period=period,
+        period_label=traffic_period_label(start, end),
+        summary=summary,
+        report_config=report_config,
+    )
 
 
 @app.post("/admin/api/leads/<lead_id>/conversation")

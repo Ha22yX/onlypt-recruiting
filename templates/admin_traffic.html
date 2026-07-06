@@ -1,0 +1,177 @@
+{% extends "admin_base.html" %}
+{% block title %}Site Traffic | onlyPT Admin{% endblock %}
+
+{% block content %}
+<section class="admin-editor admin-traffic-page">
+  <aside class="admin-editor-sidebar admin-traffic-sidebar">
+    <div class="admin-editor-head">
+      <div>
+        <p class="eyebrow">Admin workspace</p>
+        <h1>Traffic</h1>
+      </div>
+      <div class="admin-head-actions">
+        <a class="admin-logout" href="{{ url_for('admin_content', page_key='home') }}"><i data-lucide="square-pen"></i> Content</a>
+        <a class="admin-logout" href="{{ url_for('admin_leads') }}"><i data-lucide="inbox"></i> Leads</a>
+        <a class="admin-logout is-current" href="{{ url_for('admin_traffic') }}"><i data-lucide="bar-chart-3"></i> Traffic</a>
+        <a class="admin-logout" href="{{ url_for('admin_logout') }}"><i data-lucide="log-out"></i> Logout</a>
+      </div>
+    </div>
+
+    <div class="admin-leads-summary admin-traffic-summary">
+      <p class="admin-nav-label">Traffic window</p>
+      <div class="traffic-period-switch" aria-label="Traffic period">
+        <a class="{{ 'active' if period == 'day' else '' }}" href="{{ url_for('admin_traffic', period='day') }}">Today</a>
+        <a class="{{ 'active' if period == 'week' else '' }}" href="{{ url_for('admin_traffic', period='week') }}">This week</a>
+      </div>
+      <div class="admin-leads-stat">
+        <strong>{{ summary.totals.unique_visitors }}</strong>
+        <span>unique visitors</span>
+      </div>
+      <div class="traffic-report-status">
+        <p class="admin-nav-label">Email reports</p>
+        <div>
+          <span class="{{ 'enabled' if report_config.daily_enabled == 'on' else '' }}">Daily {{ 'on' if report_config.daily_enabled == 'on' else 'off' }}</span>
+          <span class="{{ 'enabled' if report_config.weekly_enabled == 'on' else '' }}">Weekly {{ 'on' if report_config.weekly_enabled == 'on' else 'off' }}</span>
+        </div>
+        <small>{{ report_config.to or 'Using lead email recipients' }}</small>
+      </div>
+      <a class="admin-leads-helper" href="{{ url_for('admin_content', page_key='email') }}">
+        <i data-lucide="mail"></i>
+        Email Notifications
+      </a>
+    </div>
+  </aside>
+
+  <div class="admin-preview-panel admin-traffic-panel">
+    <div class="admin-preview-toolbar">
+      <div>
+        <span>Site traffic</span>
+        <strong>{{ period_label }}</strong>
+      </div>
+      <a href="{{ url_for('home') }}" target="_blank" rel="noreferrer"><i data-lucide="external-link"></i> Open site</a>
+    </div>
+
+    <div class="traffic-dashboard">
+      <div class="traffic-kpi-grid">
+        <article class="traffic-kpi">
+          <span>Page views</span>
+          <strong>{{ summary.totals.page_views }}</strong>
+          <small>Total public page loads</small>
+        </article>
+        <article class="traffic-kpi">
+          <span>Unique visitors</span>
+          <strong>{{ summary.totals.unique_visitors }}</strong>
+          <small>Cookie and IP based estimate</small>
+        </article>
+        <article class="traffic-kpi">
+          <span>Form submissions</span>
+          <strong>{{ summary.totals.form_submissions }}</strong>
+          <small>Contact form completions</small>
+        </article>
+        <article class="traffic-kpi">
+          <span>Conversion rate</span>
+          <strong>{{ summary.totals.conversion_rate }}%</strong>
+          <small>Submissions / unique page visitors</small>
+        </article>
+      </div>
+
+      <div class="traffic-panel-grid">
+        <section class="traffic-card">
+          <div class="traffic-card-head">
+            <h2>Top pages</h2>
+            <i data-lucide="file-text"></i>
+          </div>
+          <div class="traffic-list">
+            {% for row in summary.pages %}
+              <div><span>{{ row.label }}</span><strong>{{ row.count }}</strong></div>
+            {% else %}
+              <p>No page views yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="traffic-card">
+          <div class="traffic-card-head">
+            <h2>Locations</h2>
+            <i data-lucide="map-pin"></i>
+          </div>
+          <div class="traffic-list">
+            {% for row in summary.regions %}
+              <div><span>{{ row.label }}</span><strong>{{ row.count }}</strong></div>
+            {% else %}
+              <p>No location data yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="traffic-card">
+          <div class="traffic-card-head">
+            <h2>Devices</h2>
+            <i data-lucide="monitor-smartphone"></i>
+          </div>
+          <div class="traffic-list compact">
+            {% for row in summary.devices %}
+              <div><span>{{ row.label }}</span><strong>{{ row.count }}</strong></div>
+            {% else %}
+              <p>No device data yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="traffic-card">
+          <div class="traffic-card-head">
+            <h2>Referrers</h2>
+            <i data-lucide="send"></i>
+          </div>
+          <div class="traffic-list compact">
+            {% for row in summary.referrers %}
+              <div><span>{{ row.label }}</span><strong>{{ row.count }}</strong></div>
+            {% else %}
+              <p>No referrer data yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+
+      <section class="traffic-card traffic-records-card">
+        <div class="traffic-card-head">
+          <h2>Recent records</h2>
+          <i data-lucide="list-filter"></i>
+        </div>
+        <div class="traffic-table-wrap">
+          <table class="traffic-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Event</th>
+                <th>Page</th>
+                <th>Location</th>
+                <th>Device</th>
+                <th>Source</th>
+                <th>IP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for event in summary.recent %}
+                <tr>
+                  <td>{{ event.local_time }}</td>
+                  <td><span class="traffic-event-pill">{{ event.type|replace('_', ' ') }}</span></td>
+                  <td>{{ event.path or '-' }}</td>
+                  <td>{{ event.location_label }}</td>
+                  <td>{{ event.device or '-' }}</td>
+                  <td>{{ event.referrer or 'Direct' }}</td>
+                  <td>{{ event.ip_label }}</td>
+                </tr>
+              {% else %}
+                <tr>
+                  <td colspan="7" class="traffic-empty">No traffic records in this period.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+</section>
+{% endblock %}
