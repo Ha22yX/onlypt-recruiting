@@ -563,6 +563,32 @@ def traffic_device_type(user_agent: str) -> str:
     return "Desktop"
 
 
+def normalize_traffic_domain(value: str) -> str:
+    host = str(value or "").split(",", 1)[0].strip().lower()
+    if not host:
+        return ""
+    if "://" not in host:
+        host = f"//{host}"
+    parsed = urllib.parse.urlparse(host)
+    domain = (parsed.hostname or "").strip().lower().rstrip(".")
+    if domain.startswith("www."):
+        domain = domain[4:]
+    return domain
+
+
+def request_traffic_domain() -> str:
+    for candidate in (
+        request.headers.get("X-Host", ""),
+        request.headers.get("X-Forwarded-Host", ""),
+        request.host,
+        request.headers.get("Referer", ""),
+    ):
+        domain = normalize_traffic_domain(candidate)
+        if domain and domain not in {"127.0.0.1", "localhost", "::1"}:
+            return domain
+    return ""
+
+
 def append_traffic_event(event: dict[str, object]) -> None:
     try:
         TRAFFIC_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -580,6 +606,7 @@ def base_traffic_event(event_type: str) -> dict[str, object]:
         "type": event_type,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "path": request.path,
+        "domain": request_traffic_domain(),
         "endpoint": request.endpoint or "",
         "method": request.method,
         "ip": ip_value,
@@ -717,8 +744,10 @@ def traffic_referrer_info(referrer: object) -> dict[str, str]:
 def enrich_traffic_event(event: dict[str, object]) -> dict[str, object]:
     created_at = parse_iso_datetime(str(event.get("created_at", "")))
     referrer_info = traffic_referrer_info(event.get("referrer"))
+    domain = normalize_traffic_domain(str(event.get("domain", "")))
     item = dict(event)
     item["local_time"] = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M") if created_at else "-"
+    item["domain_label"] = domain or "Unknown"
     item["location_label"] = traffic_location_label(event)
     item["ip_label"] = mask_ip(str(event.get("ip", "")))
     item["source_type"] = referrer_info["type"]
@@ -742,6 +771,7 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
                 "local_date": local_date,
                 "events": [],
                 "page_paths": [],
+                "domains": [],
                 "event_count": 0,
                 "page_view_count": 0,
                 "form_submission_count": 0,
@@ -753,12 +783,18 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
                 "source_label": "Direct",
                 "referrer_label": "",
                 "referrer": "",
+                "domain_label": "Unknown",
             },
         )
         enriched = enrich_traffic_event(event)
         group_events = group["events"]
         if isinstance(group_events, list):
             group_events.append(enriched)
+
+        domain_label = str(enriched.get("domain_label") or "Unknown")
+        domains = group["domains"]
+        if isinstance(domains, list) and domain_label not in domains:
+            domains.append(domain_label)
 
         group["event_count"] = int(group.get("event_count", 0)) + 1
         if event.get("type") == "page_view":
@@ -801,6 +837,10 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
         group["page_label"] = ", ".join(page_paths[:3]) if isinstance(page_paths, list) and page_paths else "-"
         if isinstance(page_paths, list) and len(page_paths) > 3:
             group["page_label"] = f"{group['page_label']} +{len(page_paths) - 3}"
+        domains = group.get("domains")
+        group["domain_label"] = ", ".join(domains[:2]) if isinstance(domains, list) and domains else "Unknown"
+        if isinstance(domains, list) and len(domains) > 2:
+            group["domain_label"] = f"{group['domain_label']} +{len(domains) - 2}"
     return grouped
 
 
@@ -844,6 +884,7 @@ def summarize_traffic(start: datetime | None, end: datetime | None) -> dict[str,
             lambda group: group.get("location_label", ""),
             60,
         ),
+        "domains": count_by(visit_groups, lambda group: group.get("domain_label", ""), 20),
         "countries": count_by(visit_groups, lambda group: group.get("location_label", ""), 60),
         "devices": count_by(visit_groups, lambda group: group.get("device", ""), 20),
         "source_counts": source_counts,
@@ -904,6 +945,7 @@ def build_legacy_traffic_report_document(
                 "- "
                 f"{group.get('last_time') or group.get('first_time') or '-'} | "
                 f"{group.get('source_label') or 'Direct'} | "
+                f"{group.get('domain_label') or 'Unknown'} | "
                 f"{group.get('location_label') or 'Unknown'} | "
                 f"{group.get('event_count', 0)} events | "
                 f"{group.get('page_label') or '-'}"
@@ -932,6 +974,8 @@ def build_legacy_traffic_report_document(
         *lines_for_table("Top pages", summary["pages"][:10]),
         "",
         *lines_for_table("Top locations", summary["regions"][:10]),
+        "",
+        *lines_for_table("Domains", summary["domains"][:10]),
         "",
         *lines_for_table("Devices", summary["devices"]),
         "",
@@ -980,6 +1024,7 @@ def build_legacy_traffic_report_document(
             <tr>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(group.get('last_time') or group.get('first_time') or '-'))}</td>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('source_label') or 'Direct'))}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('domain_label') or 'Unknown'))}</td>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('location_label') or 'Unknown'))}</td>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{html.escape(str(group.get('event_count', 0)))}</td>
             </tr>
@@ -987,7 +1032,7 @@ def build_legacy_traffic_report_document(
             for group in recent_groups
         )
     else:
-        recent_visit_rows = '<tr><td colspan="4" style="padding:12px;color:#5f6d68;">No grouped visits</td></tr>'
+        recent_visit_rows = '<tr><td colspan="5" style="padding:12px;color:#5f6d68;">No grouped visits</td></tr>'
 
     html_body = f"""<!doctype html>
 <html lang="en">
@@ -1032,6 +1077,7 @@ def build_legacy_traffic_report_document(
                 {table_block("Source mix", summary["source_counts"], "Direct and internal traffic are shown here, not in external referrer rankings.")}
                 {table_block("Top pages", summary["pages"][:10], "Ranked by page views.")}
                 {table_block("Top locations", summary["regions"][:10], "Same IP on the same day counts as one visit group per location.")}
+                {table_block("Domains", summary["domains"][:10], "Visit groups by requested site domain.")}
                 {table_block("External referrers", summary["referrers"][:10], "Only external domains are ranked. Internal navigation and direct visits are excluded.", "No external referrers")}
                 {table_block("Devices", summary["devices"], "Visit groups by device type.")}
                 <h2 style="margin:28px 0 4px;font-family:Arial,sans-serif;font-size:16px;line-height:1.3;color:#18211f;">Recent visit groups</h2>
@@ -1040,6 +1086,7 @@ def build_legacy_traffic_report_document(
                   <tr>
                     <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Last seen</th>
                     <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Source</th>
+                    <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Domain</th>
                     <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Location</th>
                     <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:right;text-transform:uppercase;">Events</th>
                   </tr>
@@ -1127,12 +1174,13 @@ def traffic_report_kpi_cell(label: str, value: object, note: str = "") -> str:
 def traffic_report_recent_rows(section: dict[str, object]) -> str:
     recent_groups = section["recent_groups"]
     if not recent_groups:
-        return '<tr><td colspan="4" style="padding:12px;color:#5f6d68;">No grouped visits</td></tr>'
+        return '<tr><td colspan="5" style="padding:12px;color:#5f6d68;">No grouped visits</td></tr>'
     return "\n".join(
         f"""
         <tr>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(group.get('last_time') or group.get('first_time') or '-'))}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('source_label') or 'Direct'))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('domain_label') or 'Unknown'))}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('location_label') or 'Unknown'))}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{html.escape(str(group.get('event_count', 0)))}</td>
         </tr>
@@ -1179,6 +1227,8 @@ def traffic_report_text_section(section: dict[str, object]) -> list[str]:
         "",
         *lines_for_table("Top locations", summary["regions"][:10]),
         "",
+        *lines_for_table("Domains", summary["domains"][:10]),
+        "",
         *lines_for_table("Devices", summary["devices"]),
         "",
         *lines_for_table("External referrers", summary["referrers"][:10], "No external referrers"),
@@ -1191,6 +1241,7 @@ def traffic_report_text_section(section: dict[str, object]) -> list[str]:
                 "- "
                 f"{group.get('last_time') or group.get('first_time') or '-'} | "
                 f"{group.get('source_label') or 'Direct'} | "
+                f"{group.get('domain_label') or 'Unknown'} | "
                 f"{group.get('location_label') or 'Unknown'} | "
                 f"{group.get('event_count', 0)} events | "
                 f"{group.get('page_label') or '-'}"
@@ -1246,6 +1297,7 @@ def traffic_report_html_section(section: dict[str, object]) -> str:
         {traffic_report_table("Source mix", summary["source_counts"], "Direct and internal traffic are shown here, not in external referrer rankings.")}
         {traffic_report_table("Top pages", summary["pages"][:10], "Ranked by page views.")}
         {traffic_report_table("Top locations", summary["regions"][:10], "Same IP on the same day counts as one visit group per location.")}
+        {traffic_report_table("Domains", summary["domains"][:10], "Visit groups by requested site domain.")}
         {traffic_report_table("External referrers", summary["referrers"][:10], "Only external domains are ranked. Internal navigation and direct visits are excluded.", "No external referrers")}
         {traffic_report_table("Devices", summary["devices"], "Visit groups by device type.")}
         <h3 style="margin:24px 0 4px;font-family:Arial,sans-serif;font-size:15px;line-height:1.3;color:#18211f;">Recent visit groups</h3>
@@ -1254,6 +1306,7 @@ def traffic_report_html_section(section: dict[str, object]) -> str:
           <tr>
             <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Last seen</th>
             <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Source</th>
+            <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Domain</th>
             <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:left;text-transform:uppercase;">Location</th>
             <th style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-family:Arial,sans-serif;font-size:11px;text-align:right;text-transform:uppercase;">Events</th>
           </tr>

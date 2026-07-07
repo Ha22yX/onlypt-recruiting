@@ -141,6 +141,20 @@
 
         <section class="traffic-card">
           <div class="traffic-card-head">
+            <h2>Domains</h2>
+            <i data-lucide="globe-2"></i>
+          </div>
+          <div class="traffic-list compact">
+            {% for row in summary.domains %}
+              <div><span>{{ row.label }}</span><strong>{{ row.count }}</strong></div>
+            {% else %}
+              <p>No domain data yet.</p>
+            {% endfor %}
+          </div>
+        </section>
+
+        <section class="traffic-card">
+          <div class="traffic-card-head">
             <h2>External referrers</h2>
             <i data-lucide="send"></i>
           </div>
@@ -169,6 +183,7 @@
                 <th>Visit</th>
                 <th>Events</th>
                 <th>Pages</th>
+                <th>Domain</th>
                 <th>Location</th>
                 <th>Device</th>
                 <th>Source</th>
@@ -195,13 +210,14 @@
                     {% if group.form_submission_count %}<span class="traffic-event-pill important">{{ group.form_submission_count }} form</span>{% endif %}
                   </td>
                   <td>{{ group.page_label or '-' }}</td>
+                  <td>{{ group.domain_label or 'Unknown' }}</td>
                   <td>{{ group.location_label }}</td>
                   <td>{{ group.device or '-' }}</td>
                   <td>{{ group.source_label or 'Direct' }}</td>
                   <td>{{ group.ip_label }}</td>
                 </tr>
                 <tr class="traffic-group-detail-row" data-traffic-record-detail="{{ group.id }}" aria-hidden="true">
-                  <td colspan="7">
+                  <td colspan="8">
                     <div class="traffic-group-detail-shell">
                       <div class="traffic-group-detail">
                         {% for event in group.events %}
@@ -209,6 +225,7 @@
                             <span>{{ event.local_time }}</span>
                             <strong>{{ event.type|replace('_', ' ') }}</strong>
                             <em>{{ event.path or '-' }}</em>
+                            <small>{{ event.domain_label or 'Unknown' }}</small>
                             <small>{{ event.source_label or 'Direct' }}</small>
                           </div>
                         {% endfor %}
@@ -218,7 +235,7 @@
                 </tr>
               {% else %}
                 <tr>
-                  <td colspan="7" class="traffic-empty">No traffic records in this period.</td>
+                  <td colspan="8" class="traffic-empty">No traffic records in this period.</td>
                 </tr>
               {% endfor %}
             </tbody>

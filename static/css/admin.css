@@ -2481,7 +2481,7 @@
 
 .traffic-table {
   width: 100%;
-  min-width: 920px;
+  min-width: 1040px;
   border-collapse: collapse;
 }
 
@@ -2646,7 +2646,7 @@
 
 .traffic-detail-item {
   display: grid;
-  grid-template-columns: 118px 120px minmax(0, 1fr) minmax(160px, 0.8fr);
+  grid-template-columns: 118px 120px minmax(0, 1fr) minmax(150px, 0.7fr) minmax(150px, 0.7fr);
   gap: 12px;
   align-items: center;
   min-height: 34px;
