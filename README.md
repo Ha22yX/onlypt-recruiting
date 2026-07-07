@@ -2,13 +2,18 @@
 
 [中文说明](README.zh-CN.md) | [Live example](https://onlypt.rosebeg.com/)
 
-onlyPT Recruiting is a reusable Flask website system for focused recruiting, consulting, professional-service, and niche lead-generation websites. The current public content is written for Physical Therapy recruiting, but the codebase is intentionally structured so the same project can power other service businesses with similar needs: a polished public website, editable marketing copy, lead capture, admin review, email notifications, and lightweight deployment.
+onlyPT Recruiting is a Flask website and admin CMS for a focused recruiting
+site. The current public content is written for Physical Therapy recruiting, but
+the same code can be adapted for other small service businesses that need
+editable pages, lead capture, admin review, email notifications, and simple
+deployment.
 
 ![onlyPT Recruiting homepage preview](static/img/readme-preview.png)
 
-## What This Project Is
+## Project Scope
 
-This is not just a static landing page. It is a small CMS-backed business website that can be reused for many similar scenarios:
+This is a small CMS-backed business website, not a large general-purpose CMS.
+It is best suited for focused service websites such as:
 
 - Recruiting agencies collecting employer and candidate inquiries.
 - Healthcare, legal, finance, education, or B2B service firms that need a premium marketing site.
