@@ -210,7 +210,7 @@
                     {% if group.form_submission_count %}<span class="traffic-event-pill important">{{ group.form_submission_count }} form</span>{% endif %}
                   </td>
                   <td>{{ group.page_label or '-' }}</td>
-                  <td>{{ group.domain_label or 'Unknown' }}</td>
+                  <td>{{ group.domain_label or '-' }}</td>
                   <td>{{ group.location_label }}</td>
                   <td>{{ group.device or '-' }}</td>
                   <td>{{ group.source_label or 'Direct' }}</td>
@@ -225,7 +225,7 @@
                             <span>{{ event.local_time }}</span>
                             <strong>{{ event.type|replace('_', ' ') }}</strong>
                             <em>{{ event.path or '-' }}</em>
-                            <small>{{ event.domain_label or 'Unknown' }}</small>
+                            <small>{{ event.domain_label or '-' }}</small>
                             <small>{{ event.source_label or 'Direct' }}</small>
                           </div>
                         {% endfor %}

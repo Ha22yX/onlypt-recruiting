@@ -584,9 +584,13 @@ def request_traffic_domain() -> str:
         request.headers.get("Referer", ""),
     ):
         domain = normalize_traffic_domain(candidate)
-        if domain and domain not in {"127.0.0.1", "localhost", "::1"}:
+        if domain and not is_internal_proxy_domain(domain):
             return domain
     return ""
+
+
+def is_internal_proxy_domain(domain: str) -> bool:
+    return domain in {"127.0.0.1", "localhost", "::1"}
 
 
 def append_traffic_event(event: dict[str, object]) -> None:
@@ -683,6 +687,19 @@ def count_by(events: list[dict[str, object]], key_fn, limit: int = 10) -> list[d
     ]
 
 
+def count_known_by(events: list[dict[str, object]], key_fn, limit: int = 10) -> list[dict[str, object]]:
+    counts: dict[str, int] = {}
+    for event in events:
+        key = str(key_fn(event) or "").strip()
+        if not key:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+    return [
+        {"label": label, "count": count}
+        for label, count in sorted(counts.items(), key=lambda item: item[1], reverse=True)[:limit]
+    ]
+
+
 def mask_ip(ip_value: str) -> str:
     try:
         address = ipaddress.ip_address(ip_value)
@@ -745,9 +762,11 @@ def enrich_traffic_event(event: dict[str, object]) -> dict[str, object]:
     created_at = parse_iso_datetime(str(event.get("created_at", "")))
     referrer_info = traffic_referrer_info(event.get("referrer"))
     domain = normalize_traffic_domain(str(event.get("domain", "")))
+    if is_internal_proxy_domain(domain):
+        domain = ""
     item = dict(event)
     item["local_time"] = created_at.astimezone(SITE_TIMEZONE).strftime("%Y-%m-%d %H:%M") if created_at else "-"
-    item["domain_label"] = domain or "Unknown"
+    item["domain_label"] = domain
     item["location_label"] = traffic_location_label(event)
     item["ip_label"] = mask_ip(str(event.get("ip", "")))
     item["source_type"] = referrer_info["type"]
@@ -783,7 +802,7 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
                 "source_label": "Direct",
                 "referrer_label": "",
                 "referrer": "",
-                "domain_label": "Unknown",
+                "domain_label": "",
             },
         )
         enriched = enrich_traffic_event(event)
@@ -791,9 +810,9 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
         if isinstance(group_events, list):
             group_events.append(enriched)
 
-        domain_label = str(enriched.get("domain_label") or "Unknown")
+        domain_label = str(enriched.get("domain_label") or "").strip()
         domains = group["domains"]
-        if isinstance(domains, list) and domain_label not in domains:
+        if domain_label and isinstance(domains, list) and domain_label not in domains:
             domains.append(domain_label)
 
         group["event_count"] = int(group.get("event_count", 0)) + 1
@@ -838,7 +857,7 @@ def group_traffic_events(events: list[dict[str, object]]) -> list[dict[str, obje
         if isinstance(page_paths, list) and len(page_paths) > 3:
             group["page_label"] = f"{group['page_label']} +{len(page_paths) - 3}"
         domains = group.get("domains")
-        group["domain_label"] = ", ".join(domains[:2]) if isinstance(domains, list) and domains else "Unknown"
+        group["domain_label"] = ", ".join(domains[:2]) if isinstance(domains, list) and domains else ""
         if isinstance(domains, list) and len(domains) > 2:
             group["domain_label"] = f"{group['domain_label']} +{len(domains) - 2}"
     return grouped
@@ -884,7 +903,7 @@ def summarize_traffic(start: datetime | None, end: datetime | None) -> dict[str,
             lambda group: group.get("location_label", ""),
             60,
         ),
-        "domains": count_by(visit_groups, lambda group: group.get("domain_label", ""), 20),
+        "domains": count_known_by(visit_groups, lambda group: group.get("domain_label", ""), 20),
         "countries": count_by(visit_groups, lambda group: group.get("location_label", ""), 60),
         "devices": count_by(visit_groups, lambda group: group.get("device", ""), 20),
         "source_counts": source_counts,
@@ -945,7 +964,7 @@ def build_legacy_traffic_report_document(
                 "- "
                 f"{group.get('last_time') or group.get('first_time') or '-'} | "
                 f"{group.get('source_label') or 'Direct'} | "
-                f"{group.get('domain_label') or 'Unknown'} | "
+                f"{group.get('domain_label') or '-'} | "
                 f"{group.get('location_label') or 'Unknown'} | "
                 f"{group.get('event_count', 0)} events | "
                 f"{group.get('page_label') or '-'}"
@@ -1024,7 +1043,7 @@ def build_legacy_traffic_report_document(
             <tr>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(group.get('last_time') or group.get('first_time') or '-'))}</td>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('source_label') or 'Direct'))}</td>
-              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('domain_label') or 'Unknown'))}</td>
+              <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('domain_label') or '-'))}</td>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('location_label') or 'Unknown'))}</td>
               <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{html.escape(str(group.get('event_count', 0)))}</td>
             </tr>
@@ -1180,7 +1199,7 @@ def traffic_report_recent_rows(section: dict[str, object]) -> str:
         <tr>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#18211f;font-weight:700;">{html.escape(str(group.get('last_time') or group.get('first_time') or '-'))}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('source_label') or 'Direct'))}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('domain_label') or 'Unknown'))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('domain_label') or '-'))}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#5f6d68;font-weight:700;">{html.escape(str(group.get('location_label') or 'Unknown'))}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e9e5;color:#1d6f67;font-weight:800;text-align:right;">{html.escape(str(group.get('event_count', 0)))}</td>
         </tr>
@@ -1241,7 +1260,7 @@ def traffic_report_text_section(section: dict[str, object]) -> list[str]:
                 "- "
                 f"{group.get('last_time') or group.get('first_time') or '-'} | "
                 f"{group.get('source_label') or 'Direct'} | "
-                f"{group.get('domain_label') or 'Unknown'} | "
+                f"{group.get('domain_label') or '-'} | "
                 f"{group.get('location_label') or 'Unknown'} | "
                 f"{group.get('event_count', 0)} events | "
                 f"{group.get('page_label') or '-'}"
