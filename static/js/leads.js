@@ -34,14 +34,24 @@
       return value;
     }
 
-    return date.toLocaleString([], {
+    return date.toLocaleString("en-US", {
+      timeZone: "America/New_York",
       year: "numeric",
       month: "short",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
+      timeZoneName: "short",
     });
   };
+
+  const formatLeadDate = (lead) => lead?.created_at_display || formatDate(lead?.created_at);
+
+  document.querySelectorAll(".lead-date[data-created-at]").forEach((element) => {
+    const value = element.getAttribute("data-created-at") || "";
+    element.textContent = formatDate(value);
+    element.title = value || element.textContent;
+  });
 
   const mailtoLink = (lead) => {
     if (!lead.email) {
@@ -95,7 +105,7 @@
         </header>
 
         <dl class="lead-detail-grid">
-          <div><dt>Received</dt><dd>${escapeHtml(formatDate(lead.created_at))}</dd></div>
+          <div><dt>Received</dt><dd>${escapeHtml(formatLeadDate(lead))}</dd></div>
           <div><dt>Audience</dt><dd>${displayValue(lead.audience)}</dd></div>
           <div><dt>Email</dt><dd>${lead.email ? `<a href="mailto:${escapeHtml(lead.email)}">${escapeHtml(lead.email)}</a>` : "-"}</dd></div>
           <div><dt>Phone</dt><dd>${lead.phone ? `<a href="tel:${escapeHtml(lead.phone)}">${escapeHtml(lead.phone)}</a>` : "-"}</dd></div>

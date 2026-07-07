@@ -1209,6 +1209,11 @@
 .admin-leads-table th,
 .admin-leads-table td {
   padding: 14px 12px;
+  min-width: 0;
+  max-width: 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .admin-leads-table th:nth-child(1),
@@ -1253,8 +1258,46 @@
 
 .lead-message {
   width: auto;
-  max-height: 9.2rem;
-  overflow: auto;
+  max-height: none;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  line-height: 1.45;
+}
+
+.lead-date,
+.lead-table-text,
+.lead-contact-stack,
+.lead-message {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.lead-date {
+  display: block;
+  line-height: 1.45;
+}
+
+.lead-table-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  line-height: 1.45;
+}
+
+.lead-contact-stack {
+  min-width: 0;
+}
+
+.lead-contact-stack a {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.45;
 }
 
 /* Unified admin workspace: Content and Leads now share the same shell. */

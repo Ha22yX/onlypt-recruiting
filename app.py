@@ -11,7 +11,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from base64 import b64encode
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from email.message import EmailMessage
 from email.utils import format_datetime, formataddr, getaddresses, make_msgid, parseaddr
 from functools import wraps
@@ -46,10 +46,42 @@ STATIC_FAVICON_FILE = Path(app.root_path) / "static" / "favicon.ico"
 STATIC_FAVICON_PNG_FILE = Path(app.root_path) / "static" / "favicon-192.png"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
+
+
+class EasternFallbackTimezone(tzinfo):
+    standard_offset = timedelta(hours=-5)
+    daylight_offset = timedelta(hours=-4)
+
+    @staticmethod
+    def first_sunday_on_or_after(value: datetime) -> datetime:
+        days_to_go = 6 - value.weekday()
+        if days_to_go:
+            value += timedelta(days=days_to_go)
+        return value
+
+    def dst_start_end(self, year: int) -> tuple[datetime, datetime]:
+        start = self.first_sunday_on_or_after(datetime(year, 3, 8, 2))
+        end = self.first_sunday_on_or_after(datetime(year, 11, 1, 2))
+        return start, end
+
+    def dst(self, dt: datetime | None) -> timedelta:
+        if dt is None:
+            return timedelta(0)
+        naive = dt.replace(tzinfo=None)
+        start, end = self.dst_start_end(naive.year)
+        return timedelta(hours=1) if start <= naive < end else timedelta(0)
+
+    def utcoffset(self, dt: datetime | None) -> timedelta:
+        return self.standard_offset + self.dst(dt)
+
+    def tzname(self, dt: datetime | None) -> str:
+        return "EDT" if self.dst(dt) else "EST"
+
+
 try:
     SITE_TIMEZONE = ZoneInfo(os.environ.get("ONLYPT_SITE_TIMEZONE", "America/New_York"))
 except ZoneInfoNotFoundError:
-    SITE_TIMEZONE = timezone.utc
+    SITE_TIMEZONE = EasternFallbackTimezone()
 ALLOWED_BACKGROUND_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 ALLOWED_FAVICON_EXTENSIONS = {"ico", "png", "svg", "webp"}
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "").strip()
@@ -429,6 +461,13 @@ def parse_iso_datetime(value: str) -> datetime | None:
     except ValueError:
         return None
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def format_admin_local_datetime(value: str) -> str:
+    parsed = parse_iso_datetime(value)
+    if parsed is None:
+        return value or "-"
+    return parsed.astimezone(SITE_TIMEZONE).strftime("%b %d, %Y, %I:%M %p %Z")
 
 
 def client_ip_address() -> str:
@@ -1477,6 +1516,7 @@ def read_leads() -> list[dict[str, str]]:
             **threads.get(lead_id, {}),
         }
         row["lead_id"] = lead_id
+        row["created_at_display"] = format_admin_local_datetime(str(row.get("created_at", "")))
         row["thread_status"] = str(thread.get("status", "new"))
         row["thread_next_step"] = str(thread.get("next_step", ""))
         row["thread_updated_at"] = str(thread.get("updated_at", ""))

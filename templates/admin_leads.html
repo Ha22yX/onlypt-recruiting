@@ -70,32 +70,32 @@
                 >
                   <td data-label="Received">
                     <button class="lead-open-button" type="button" data-lead-open="{{ lead.lead_id }}">
-                      <span class="lead-date">{{ lead.created_at or '-' }}</span>
+                      <span class="lead-date" data-created-at="{{ lead.created_at or '' }}" title="{{ lead.created_at or '-' }}">{{ lead.created_at_display or '-' }}</span>
                     </button>
                   </td>
                   <td data-label="Status">
                     <span class="lead-pill lead-status-pill" data-status="{{ lead.thread_status }}">{{ lead.thread_status|replace('_', ' ') }}</span>
                   </td>
                   <td data-label="Name">
-                    <strong>{{ lead.name or '-' }}</strong>
+                    <strong class="lead-table-text" title="{{ lead.name or '-' }}">{{ lead.name or '-' }}</strong>
                     {% if lead.thread_note_count != '0' %}<small class="lead-note-count">{{ lead.thread_note_count }} notes</small>{% endif %}
                   </td>
                   <td data-label="Contact">
                     <div class="lead-contact-stack">
                       {% if lead.email %}
-                        <a href="mailto:{{ lead.email }}">{{ lead.email }}</a>
+                        <a href="mailto:{{ lead.email }}" title="{{ lead.email }}">{{ lead.email }}</a>
                       {% else %}
                         <span>-</span>
                       {% endif %}
                       {% if lead.phone %}
-                        <a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>
+                        <a href="tel:{{ lead.phone }}" title="{{ lead.phone }}">{{ lead.phone }}</a>
                       {% endif %}
                     </div>
                   </td>
-                  <td data-label="Organization">{{ lead.organization or '-' }}</td>
-                  <td data-label="Role / setting">{{ lead.role or '-' }}</td>
+                  <td data-label="Organization"><span class="lead-table-text" title="{{ lead.organization or '-' }}">{{ lead.organization or '-' }}</span></td>
+                  <td data-label="Role / setting"><span class="lead-table-text" title="{{ lead.role or '-' }}">{{ lead.role or '-' }}</span></td>
                   <td data-label="Message">
-                    <p class="lead-message">{{ lead.message or '-' }}</p>
+                    <p class="lead-message" title="{{ lead.message or '-' }}">{{ lead.message or '-' }}</p>
                   </td>
                 </tr>
               {% endfor %}
@@ -128,5 +128,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{{ url_for('static', filename='js/leads.js') }}?v=20260704-lead-tracking1"></script>
+  <script src="{{ url_for('static', filename='js/leads.js') }}?v=20260707-lead-time1"></script>
 {% endblock %}
