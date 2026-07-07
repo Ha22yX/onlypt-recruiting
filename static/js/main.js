@@ -6,6 +6,9 @@ window.addEventListener("DOMContentLoaded", () => {
   }
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const mobileLiteQuery = window.matchMedia("(max-width: 900px)");
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
   document.documentElement.classList.toggle("mobile-lite", mobileLiteQuery.matches);
   const watchMediaQuery = (query, callback) => {
     if (typeof query?.addEventListener === "function") {
@@ -488,14 +491,44 @@ window.addEventListener("DOMContentLoaded", () => {
     );
   };
 
+  const scrollToPageTopBeforeSwap = () =>
+    new Promise((resolve) => {
+      const startY = window.scrollY || window.pageYOffset || 0;
+      if (prefersReducedMotion || startY <= 2) {
+        window.scrollTo(0, 0);
+        resolve();
+        return;
+      }
+
+      const duration = Math.min(760, Math.max(320, startY * 0.18));
+      const startTime = performance.now();
+      const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3);
+
+      const step = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        const nextY = Math.round(startY * (1 - easeOutCubic(progress)));
+        window.scrollTo(0, nextY);
+        if (progress < 1 && window.scrollY > 1) {
+          window.requestAnimationFrame(step);
+          return;
+        }
+        window.scrollTo(0, 0);
+        resolve();
+      };
+
+      window.requestAnimationFrame(step);
+    });
+
   const navigatePjax = async (url, options = {}) => {
     document.documentElement.classList.add("pjax-loading");
     closeNav();
     try {
-      const response = await fetch(url, {
+      const fetchNextPage = fetch(url, {
         headers: { "X-Requested-With": "fetch" },
         credentials: "same-origin",
       });
+
+      const [response] = await Promise.all([fetchNextPage, scrollToPageTopBeforeSwap()]);
       if (!response.ok) {
         window.location.href = url;
         return;
@@ -511,7 +544,7 @@ window.addEventListener("DOMContentLoaded", () => {
       if (!options.replace) {
         window.history.pushState({ pjax: true }, "", url);
       }
-      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" });
+      window.scrollTo(0, 0);
     } catch (_error) {
       window.location.href = url;
     }
