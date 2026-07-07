@@ -2463,15 +2463,15 @@
 }
 
 .traffic-records-card {
-  min-height: 0;
+  min-height: clamp(360px, 48vh, 620px);
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto minmax(250px, auto) auto;
   contain: layout paint;
 }
 
 .traffic-table-wrap {
   height: auto;
-  min-height: 0;
+  min-height: 250px;
   overflow-x: auto;
   overflow-y: visible;
   overscroll-behavior: auto;
