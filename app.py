@@ -933,6 +933,7 @@ def summarize_traffic(start: datetime | None, end: datetime | None) -> dict[str,
     form_submissions = [event for event in events if event.get("type") == "form_submission"]
     visit_groups = group_traffic_events(events)
     page_visit_groups = [group for group in visit_groups if int(group.get("page_view_count", 0)) > 0]
+    form_submitter_groups = [group for group in visit_groups if int(group.get("form_submission_count", 0)) > 0]
     external_referrer_groups = [
         group for group in visit_groups if str(group.get("source_type", "")) == "external"
     ]
@@ -957,7 +958,8 @@ def summarize_traffic(start: datetime | None, end: datetime | None) -> dict[str,
             "unique_visitors": len(visit_groups),
             "unique_page_visitors": len(page_visit_groups),
             "form_submissions": len(form_submissions),
-            "conversion_rate": round((len(form_submissions) / len(page_visit_groups) * 100), 1) if page_visit_groups else 0,
+            "unique_form_submitters": len(form_submitter_groups),
+            "conversion_rate": round((len(form_submitter_groups) / len(visit_groups) * 100), 1) if visit_groups else 0,
             "views_per_visitor": views_per_visitor,
             "external_referrers": len(external_referrer_groups),
         },
@@ -1043,6 +1045,7 @@ def build_legacy_traffic_report_document(
         f"Page views: {totals['page_views']}",
         f"Visit groups: {totals['unique_visitors']}",
         f"Form submissions: {totals['form_submissions']}",
+        f"Submitting visitors: {totals.get('unique_form_submitters', 0)}",
         f"Conversion rate: {totals['conversion_rate']}%",
         f"Page views per visit group: {totals['views_per_visitor']}",
         f"External referrer groups: {totals['external_referrers']}",
@@ -1141,7 +1144,7 @@ def build_legacy_traffic_report_document(
                     {kpi_cell("Form submissions", totals["form_submissions"], "contact form completions")}
                   </tr>
                   <tr>
-                    {kpi_cell("Conversion", f"{totals['conversion_rate']}%", "forms / visit groups")}
+                    {kpi_cell("Conversion", f"{totals['conversion_rate']}%", "submitting visitors / visit groups")}
                     {kpi_cell("Views per group", totals["views_per_visitor"], "engagement depth")}
                     {kpi_cell("External referrers", totals["external_referrers"], "external source groups")}
                   </tr>
@@ -1295,6 +1298,7 @@ def traffic_report_text_section(section: dict[str, object]) -> list[str]:
         f"Page views: {totals['page_views']}",
         f"Visit groups: {totals['unique_visitors']}",
         f"Form submissions: {totals['form_submissions']}",
+        f"Submitting visitors: {totals.get('unique_form_submitters', 0)}",
         f"Conversion rate: {totals['conversion_rate']}%",
         f"Page views per visit group: {totals['views_per_visitor']}",
         f"External referrer groups: {totals['external_referrers']}",
@@ -1361,7 +1365,7 @@ def traffic_report_html_section(section: dict[str, object]) -> str:
             {traffic_report_kpi_cell("Form submissions", totals["form_submissions"], "contact form completions")}
           </tr>
           <tr>
-            {traffic_report_kpi_cell("Conversion", f"{totals['conversion_rate']}%", "forms / visit groups")}
+            {traffic_report_kpi_cell("Conversion", f"{totals['conversion_rate']}%", "submitting visitors / visit groups")}
             {traffic_report_kpi_cell("Views per group", totals["views_per_visitor"], "engagement depth")}
             {traffic_report_kpi_cell("External referrers", totals["external_referrers"], "external source groups")}
           </tr>
