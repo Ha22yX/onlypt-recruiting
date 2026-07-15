@@ -37,6 +37,7 @@ EMAIL_QUEUE_FILE = Path(app.instance_path) / "email_queue.json"
 TRAFFIC_LOG_FILE = Path(app.instance_path) / "traffic_events.jsonl"
 IP_REGION_CACHE_FILE = Path(app.instance_path) / "ip_region_cache.json"
 TRAFFIC_REPORT_STATE_FILE = Path(app.instance_path) / "traffic_report_state.json"
+CONTACT_IP_BLOCKS_FILE = Path(app.instance_path) / "contact_ip_blocks.json"
 PAGE_EDITS_DIR = Path(app.instance_path) / "page_edits"
 CONTENT_FILE = Path(app.instance_path) / "content_overrides.json"
 UPLOAD_DIR = Path(app.instance_path) / "uploads"
@@ -475,6 +476,69 @@ def client_ip_address() -> str:
     if forwarded_for:
         return forwarded_for.split(",", 1)[0].strip()
     return request.remote_addr or "unknown"
+
+
+def normalized_ip_address(ip_value: str) -> str:
+    try:
+        return str(ipaddress.ip_address(str(ip_value).strip()))
+    except ValueError:
+        return ""
+
+
+def load_contact_ip_blocks() -> dict[str, dict[str, str]]:
+    raw_blocks = load_json_file(CONTACT_IP_BLOCKS_FILE, {})
+    if not isinstance(raw_blocks, dict):
+        return {}
+
+    blocks: dict[str, dict[str, str]] = {}
+    for ip_value, metadata in raw_blocks.items():
+        normalized = normalized_ip_address(str(ip_value))
+        if not normalized:
+            continue
+        if isinstance(metadata, dict):
+            blocks[normalized] = {
+                "ip": normalized,
+                "blocked_at": str(metadata.get("blocked_at", "")),
+                "blocked_by": str(metadata.get("blocked_by", "admin")),
+            }
+        elif metadata:
+            blocks[normalized] = {
+                "ip": normalized,
+                "blocked_at": "",
+                "blocked_by": "admin",
+            }
+    return blocks
+
+
+def save_contact_ip_blocks(blocks: dict[str, dict[str, str]]) -> None:
+    write_json_file(CONTACT_IP_BLOCKS_FILE, dict(sorted(blocks.items())))
+
+
+def set_contact_ip_block(ip_value: str, blocked: bool, blocked_by: str = "admin") -> dict[str, str | bool]:
+    normalized = normalized_ip_address(ip_value)
+    if not normalized:
+        raise ValueError("Invalid IP address.")
+
+    blocks = load_contact_ip_blocks()
+    if blocked:
+        blocks[normalized] = {
+            "ip": normalized,
+            "blocked_at": datetime.now(timezone.utc).isoformat(),
+            "blocked_by": blocked_by or "admin",
+        }
+    else:
+        blocks.pop(normalized, None)
+    save_contact_ip_blocks(blocks)
+    return {
+        "ip": normalized,
+        "ip_label": mask_ip(normalized),
+        "blocked": normalized in blocks,
+    }
+
+
+def is_contact_ip_blocked(ip_value: str) -> bool:
+    normalized = normalized_ip_address(ip_value)
+    return bool(normalized and normalized in load_contact_ip_blocks())
 
 
 def is_public_ip(ip_value: str) -> bool:
@@ -2583,6 +2647,10 @@ def contact():
             flash(cms_text("contact", "flash.missing"), "error")
             return redirect(url_for("contact"))
 
+        if is_contact_ip_blocked(client_ip_address()):
+            flash("This network is not allowed to submit the contact form.", "error")
+            return redirect(url_for("contact"))
+
         rate_limit_message = submission_rate_limit_message()
         if rate_limit_message:
             flash(rate_limit_message, "error")
@@ -2731,6 +2799,11 @@ def admin_traffic():
     page_start = (records_page - 1) * records_per_page
     page_end = page_start + records_per_page
     paginated_records = recent_groups[page_start:page_end] if isinstance(recent_groups, list) else []
+    contact_ip_blocks = load_contact_ip_blocks()
+    for record in paginated_records:
+        if isinstance(record, dict):
+            record_ip = normalized_ip_address(str(record.get("ip", "")))
+            record["contact_blocked"] = bool(record_ip and record_ip in contact_ip_blocks)
     prev_args = {**filter_args, "records_page": records_page - 1}
     next_args = {**filter_args, "records_page": records_page + 1}
     report_config = traffic_report_config()
@@ -2758,6 +2831,26 @@ def admin_traffic():
         },
         report_config=report_config,
     )
+
+
+@app.post("/admin/api/contact-ip-blocks")
+@admin_required
+def admin_update_contact_ip_block():
+    payload = request.get_json(silent=True) or {}
+    try:
+        block_state = set_contact_ip_block(
+            ip_value=str(payload.get("ip", "")),
+            blocked=bool(payload.get("blocked", True)),
+        )
+    except ValueError:
+        return jsonify({"ok": False, "message": "Invalid IP address."}), 400
+
+    message = (
+        f"{block_state['ip_label']} can no longer submit the contact form."
+        if block_state["blocked"]
+        else f"{block_state['ip_label']} can submit the contact form again."
+    )
+    return jsonify({"ok": True, "message": message, **block_state})
 
 
 @app.post("/admin/api/leads/<lead_id>/conversation")

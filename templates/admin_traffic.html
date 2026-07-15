@@ -2,7 +2,7 @@
 {% block title %}Site Traffic | onlyPT Admin{% endblock %}
 
 {% block content %}
-<section class="admin-editor admin-traffic-page">
+<section class="admin-editor admin-traffic-page" data-contact-ip-block-url="{{ url_for('admin_update_contact_ip_block') }}">
   <aside class="admin-editor-sidebar admin-traffic-sidebar">
     <div class="admin-editor-head">
       <div>
@@ -192,7 +192,16 @@
             </thead>
             <tbody>
               {% for group in recent_records %}
-                <tr class="traffic-group-row" data-traffic-record-row="{{ group.id }}" role="button" tabindex="0" aria-label="Expand visit details for {{ group.ip_label }}">
+                <tr
+                  class="traffic-group-row {{ 'is-contact-blocked' if group.contact_blocked else '' }}"
+                  data-traffic-record-row="{{ group.id }}"
+                  data-traffic-ip="{{ group.ip }}"
+                  data-traffic-ip-label="{{ group.ip_label }}"
+                  data-traffic-contact-blocked="{{ 'true' if group.contact_blocked else 'false' }}"
+                  role="button"
+                  tabindex="0"
+                  aria-label="Expand visit details for {{ group.ip_label }}"
+                >
                   <td>
                     <button class="traffic-record-toggle" type="button" data-traffic-record-toggle="{{ group.id }}" aria-expanded="false">
                       <span class="traffic-record-copy">
@@ -214,7 +223,12 @@
                   <td>{{ group.location_label }}</td>
                   <td>{{ group.device or '-' }}</td>
                   <td>{{ group.source_label or 'Direct' }}</td>
-                  <td>{{ group.ip_label }}</td>
+                  <td>
+                    <span class="traffic-ip-cell">{{ group.ip_label }}</span>
+                    {% if group.contact_blocked %}
+                      <span class="traffic-block-badge">Contact blocked</span>
+                    {% endif %}
+                  </td>
                 </tr>
                 <tr class="traffic-group-detail-row" data-traffic-record-detail="{{ group.id }}" aria-hidden="true">
                   <td colspan="8">
@@ -251,11 +265,25 @@
       </section>
     </div>
   </div>
+  <div class="traffic-context-menu" data-traffic-ip-menu hidden>
+    <p data-traffic-ip-menu-title>Visitor</p>
+    <button type="button" data-traffic-ip-menu-action>
+      <i data-lucide="ban"></i>
+      <span>Block contact form submissions</span>
+    </button>
+  </div>
 </section>
 {% endblock %}
 
 {% block extra_scripts %}
   <script>
+    const trafficRoot = document.querySelector(".admin-traffic-page");
+    const contactIpBlockUrl = trafficRoot?.dataset.contactIpBlockUrl || "";
+    const ipMenu = document.querySelector("[data-traffic-ip-menu]");
+    const ipMenuTitle = document.querySelector("[data-traffic-ip-menu-title]");
+    const ipMenuAction = document.querySelector("[data-traffic-ip-menu-action]");
+    let activeTrafficIpRow = null;
+
     const toggleTrafficRecord = (button) => {
         const recordId = button.dataset.trafficRecordToggle;
         const detail = document.querySelector(`[data-traffic-record-detail="${recordId}"]`);
@@ -281,6 +309,56 @@
         }
     };
 
+    const hideTrafficIpMenu = () => {
+      if (!ipMenu) return;
+      ipMenu.hidden = true;
+      activeTrafficIpRow = null;
+    };
+
+    const positionTrafficIpMenu = (event) => {
+      if (!ipMenu) return;
+      ipMenu.hidden = false;
+      const menuRect = ipMenu.getBoundingClientRect();
+      const margin = 10;
+      const left = Math.min(event.clientX, window.innerWidth - menuRect.width - margin);
+      const top = Math.min(event.clientY, window.innerHeight - menuRect.height - margin);
+      ipMenu.style.left = `${Math.max(margin, left)}px`;
+      ipMenu.style.top = `${Math.max(margin, top)}px`;
+    };
+
+    const updateTrafficIpMenu = (row) => {
+      if (!ipMenuAction || !ipMenuTitle) return;
+      const blocked = row.dataset.trafficContactBlocked === "true";
+      const ipLabel = row.dataset.trafficIpLabel || "Visitor";
+      const iconName = blocked ? "shield-check" : "ban";
+      ipMenuTitle.textContent = ipLabel;
+      ipMenuAction.dataset.nextBlocked = blocked ? "false" : "true";
+      ipMenuAction.innerHTML = `
+        <i data-lucide="${iconName}"></i>
+        <span>${blocked ? "Allow contact form submissions" : "Block contact form submissions"}</span>
+      `;
+      window.lucide?.createIcons();
+    };
+
+    const setVisibleRowsContactBlocked = (ip, blocked) => {
+      document.querySelectorAll(`[data-traffic-ip="${CSS.escape(ip)}"]`).forEach((row) => {
+        row.dataset.trafficContactBlocked = blocked ? "true" : "false";
+        row.classList.toggle("is-contact-blocked", blocked);
+        const ipCell = row.querySelector("td:last-child");
+        if (!ipCell) return;
+        let badge = ipCell.querySelector(".traffic-block-badge");
+        if (blocked && !badge) {
+          badge = document.createElement("span");
+          badge.className = "traffic-block-badge";
+          badge.textContent = "Contact blocked";
+          ipCell.appendChild(badge);
+        }
+        if (!blocked && badge) {
+          badge.remove();
+        }
+      });
+    };
+
     document.querySelectorAll("[data-traffic-record-toggle]").forEach((button) => {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -293,6 +371,13 @@
         const button = row.querySelector("[data-traffic-record-toggle]");
         if (button) toggleTrafficRecord(button);
       });
+      row.addEventListener("contextmenu", (event) => {
+        if (!contactIpBlockUrl || !row.dataset.trafficIp) return;
+        event.preventDefault();
+        activeTrafficIpRow = row;
+        updateTrafficIpMenu(row);
+        positionTrafficIpMenu(event);
+      });
       row.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") {
           return;
@@ -302,6 +387,43 @@
         if (button) toggleTrafficRecord(button);
       });
     });
+
+    ipMenuAction?.addEventListener("click", async () => {
+      if (!activeTrafficIpRow || !contactIpBlockUrl) return;
+      const ip = activeTrafficIpRow.dataset.trafficIp;
+      const nextBlocked = ipMenuAction.dataset.nextBlocked === "true";
+      ipMenuAction.disabled = true;
+      try {
+        const response = await fetch(contactIpBlockUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ip, blocked: nextBlocked}),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.message || "Unable to update contact block.");
+        }
+        setVisibleRowsContactBlocked(payload.ip, Boolean(payload.blocked));
+        hideTrafficIpMenu();
+      } catch (error) {
+        window.alert(error.message || "Unable to update contact block.");
+      } finally {
+        ipMenuAction.disabled = false;
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (ipMenu && !ipMenu.hidden && !ipMenu.contains(event.target)) {
+        hideTrafficIpMenu();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        hideTrafficIpMenu();
+      }
+    });
+    window.addEventListener("resize", hideTrafficIpMenu);
+    document.querySelector(".traffic-table-wrap")?.addEventListener("scroll", hideTrafficIpMenu, {passive: true});
     window.lucide?.createIcons();
   </script>
 {% endblock %}
