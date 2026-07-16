@@ -1,7 +1,9 @@
 .venv/
 __pycache__/
 *.py[cod]
-instance/
+instance
 .env
 .DS_Store
 *.tar.gz
+gunicorn_conf.py
+uwsgi.ini
