@@ -63,6 +63,30 @@
     return `mailto:${encodeURIComponent(lead.email)}?subject=${subject}&body=${body}`;
   };
 
+  const leadSourceMarkup = (lead) => {
+    const hasSource = lead.ip || lead.user_agent || lead.referrer;
+    if (!hasSource) {
+      return "";
+    }
+
+    return `
+      <section class="lead-detail-message lead-source-panel">
+        <span>Submission source</span>
+        <dl class="lead-detail-grid">
+          <div><dt>IP</dt><dd>${displayValue(lead.ip)}</dd></div>
+          <div><dt>Referrer</dt><dd>${displayValue(lead.referrer)}</dd></div>
+          <div><dt>User agent</dt><dd>${displayValue(lead.user_agent)}</dd></div>
+        </dl>
+        ${
+          lead.ip
+            ? `<button class="lead-source-block-button" type="button" data-lead-block-ip="${escapeHtml(lead.ip)}"><i data-lucide="ban"></i> Block this IP from contact form</button>`
+            : ""
+        }
+        <small class="lead-source-status" data-lead-source-status></small>
+      </section>
+    `;
+  };
+
   const renderNotes = (lead) => {
     const notes = Array.isArray(lead.thread_notes) ? lead.thread_notes : [];
     if (!notes.length) {
@@ -115,6 +139,8 @@
           <span>Original message</span>
           <p>${escapeHtml(lead.message || "-").replace(/\n/g, "<br>")}</p>
         </section>
+
+        ${leadSourceMarkup(lead)}
 
         <form class="lead-thread-form" data-lead-thread-form>
           <label>
@@ -256,6 +282,35 @@
     } catch (error) {
       if (status) status.textContent = error.message || "Save failed.";
       if (button) button.disabled = false;
+    }
+  });
+
+  detail?.addEventListener("click", async (event) => {
+    const button = event.target instanceof Element ? event.target.closest("[data-lead-block-ip]") : null;
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const status = detail.querySelector("[data-lead-source-status]");
+    button.disabled = true;
+    if (status) status.textContent = "Blocking...";
+
+    try {
+      const response = await fetch("/admin/api/contact-ip-blocks", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ip: button.dataset.leadBlockIp, blocked: true}),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.message || "Could not block this IP.");
+      }
+      if (status) status.textContent = "IP blocked from contact form submissions.";
+      button.textContent = "IP blocked";
+    } catch (error) {
+      if (status) status.textContent = error.message || "Could not block this IP.";
+      button.disabled = false;
     }
   });
 

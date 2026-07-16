@@ -6,6 +6,7 @@ import html
 import ipaddress
 import json
 import os
+import secrets
 import smtplib
 import urllib.error
 import urllib.parse
@@ -47,6 +48,23 @@ STATIC_FAVICON_FILE = Path(app.root_path) / "static" / "favicon.ico"
 STATIC_FAVICON_PNG_FILE = Path(app.root_path) / "static" / "favicon-192.png"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
+CONTACT_FORM_MIN_SECONDS = 2
+CONTACT_FORM_TOKEN_SESSION_KEY = "contact_form_token"
+CONTACT_FORM_STARTED_SESSION_KEY = "contact_form_started_at"
+CONTACT_FORM_HONEYPOT_SESSION_KEY = "contact_honeypot_name"
+LEAD_FIELDNAMES = [
+    "created_at",
+    "audience",
+    "name",
+    "email",
+    "organization",
+    "phone",
+    "role",
+    "message",
+    "ip",
+    "user_agent",
+    "referrer",
+]
 
 
 class EasternFallbackTimezone(tzinfo):
@@ -406,16 +424,7 @@ CONTENT_PAGES = {
 
 def write_lead(form_data: dict[str, str]) -> None:
     LEADS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = [
-        "created_at",
-        "audience",
-        "name",
-        "email",
-        "organization",
-        "phone",
-        "role",
-        "message",
-    ]
+    ensure_leads_file_schema()
     row = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "audience": form_data.get("audience", ""),
@@ -425,17 +434,86 @@ def write_lead(form_data: dict[str, str]) -> None:
         "phone": form_data.get("phone", ""),
         "role": form_data.get("role", ""),
         "message": form_data.get("message", ""),
+        "ip": client_ip_address(),
+        "user_agent": request.headers.get("User-Agent", "")[:500],
+        "referrer": request.headers.get("Referer", "")[:500],
     }
     is_new = not LEADS_FILE.exists()
     with LEADS_FILE.open("a", newline="", encoding="utf-8") as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer = csv.DictWriter(file, fieldnames=LEAD_FIELDNAMES)
         if is_new:
             writer.writeheader()
         writer.writerow(row)
 
 
+def ensure_leads_file_schema() -> None:
+    if not LEADS_FILE.exists():
+        return
+
+    try:
+        with LEADS_FILE.open("r", newline="", encoding="utf-8") as file:
+            reader = csv.DictReader(file)
+            existing_fieldnames = reader.fieldnames or []
+            rows = list(reader)
+    except OSError:
+        return
+
+    if all(field in existing_fieldnames for field in LEAD_FIELDNAMES):
+        return
+
+    migrated_rows = []
+    for row in rows:
+        migrated_rows.append({field: row.get(field, "") for field in LEAD_FIELDNAMES})
+
+    with LEADS_FILE.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=LEAD_FIELDNAMES)
+        writer.writeheader()
+        writer.writerows(migrated_rows)
+
+
 def now_timestamp() -> float:
     return datetime.now(timezone.utc).timestamp()
+
+
+def prepare_contact_form_challenge() -> dict[str, str]:
+    token = secrets.token_urlsafe(24)
+    honeypot_name = f"company_site_{secrets.token_hex(6)}"
+    session[CONTACT_FORM_TOKEN_SESSION_KEY] = token
+    session[CONTACT_FORM_STARTED_SESSION_KEY] = now_timestamp()
+    session[CONTACT_FORM_HONEYPOT_SESSION_KEY] = honeypot_name
+    return {
+        "token": token,
+        "honeypot_name": honeypot_name,
+    }
+
+
+def clear_contact_form_challenge() -> None:
+    session.pop(CONTACT_FORM_TOKEN_SESSION_KEY, None)
+    session.pop(CONTACT_FORM_STARTED_SESSION_KEY, None)
+    session.pop(CONTACT_FORM_HONEYPOT_SESSION_KEY, None)
+
+
+def contact_form_challenge_error() -> str:
+    expected_token = str(session.get(CONTACT_FORM_TOKEN_SESSION_KEY, ""))
+    submitted_token = request.form.get("contact_form_token", "")
+    honeypot_name = str(session.get(CONTACT_FORM_HONEYPOT_SESSION_KEY, ""))
+    started_at = session.get(CONTACT_FORM_STARTED_SESSION_KEY)
+
+    if not expected_token or not secrets.compare_digest(submitted_token, expected_token):
+        return "Please refresh the contact form and try again."
+
+    if honeypot_name and request.form.get(honeypot_name, "").strip():
+        return "Please refresh the contact form and try again."
+
+    try:
+        elapsed = now_timestamp() - float(started_at)
+    except (TypeError, ValueError):
+        return "Please refresh the contact form and try again."
+
+    if elapsed < CONTACT_FORM_MIN_SECONDS:
+        return "Please wait a moment before submitting the form."
+
+    return ""
 
 
 def load_json_file(path: Path, fallback):
@@ -2651,16 +2729,24 @@ def contact():
             flash(cms_text("contact", "flash.missing"), "error")
             return redirect(url_for("contact"))
 
+        challenge_error = contact_form_challenge_error()
+        if challenge_error:
+            flash(challenge_error, "error")
+            return redirect(url_for("contact"))
+
         if is_contact_ip_blocked(client_ip_address()):
+            clear_contact_form_challenge()
             flash("This network is not allowed to submit the contact form.", "error")
             return redirect(url_for("contact"))
 
         rate_limit_message = submission_rate_limit_message()
         if rate_limit_message:
+            clear_contact_form_challenge()
             flash(rate_limit_message, "error")
             return redirect(url_for("contact"))
 
         lead_data = request.form.to_dict()
+        clear_contact_form_challenge()
         write_lead(lead_data)
         record_form_submission_event(lead_data)
         notify_lead_email(lead_data)
@@ -2670,7 +2756,12 @@ def contact():
         return redirect(url_for("contact"))
 
     audience = request.args.get("audience", "employer")
-    return render_template("contact.html", page="contact", audience=audience)
+    return render_template(
+        "contact.html",
+        page="contact",
+        audience=audience,
+        contact_challenge=prepare_contact_form_challenge(),
+    )
 
 
 @app.get("/uploads/backgrounds/<path:filename>")

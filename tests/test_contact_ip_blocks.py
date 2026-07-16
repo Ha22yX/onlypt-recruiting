@@ -33,9 +33,14 @@ def client(tmp_path, monkeypatch):
 
 
 def post_contact(client, ip_value="203.0.113.9"):
+    with client.session_transaction() as session:
+        session["contact_form_token"] = "token-123"
+        session["contact_form_started_at"] = 0
+        session["contact_honeypot_name"] = "company_website"
     return client.post(
         "/contact",
         data={
+            "contact_form_token": "token-123",
             "audience": "employer",
             "name": "Blocked Visitor",
             "email": "blocked@example.com",

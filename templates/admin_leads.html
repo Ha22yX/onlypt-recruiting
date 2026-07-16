@@ -66,7 +66,7 @@
               {% for lead in leads %}
                 <tr
                   data-lead-row="{{ lead.lead_id }}"
-                  data-search-text="{{ [lead.created_at, lead.audience, lead.name, lead.email, lead.phone, lead.organization, lead.role, lead.message, lead.thread_status, lead.thread_next_step]|join(' ')|lower }}"
+                  data-search-text="{{ [lead.created_at, lead.audience, lead.name, lead.email, lead.phone, lead.organization, lead.role, lead.message, lead.ip, lead.user_agent, lead.referrer, lead.thread_status, lead.thread_next_step]|join(' ')|lower }}"
                 >
                   <td data-label="Received">
                     <button class="lead-open-button" type="button" data-lead-open="{{ lead.lead_id }}">
@@ -128,5 +128,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-  <script src="{{ url_for('static', filename='js/leads.js') }}?v=20260707-lead-time1"></script>
+  <script src="{{ url_for('static', filename='js/leads.js') }}?v=20260716-contact-source1"></script>
 {% endblock %}
