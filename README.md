@@ -211,19 +211,23 @@ Recommended production setup:
 
 1. Run behind Nginx or another reverse proxy.
 2. Serve Flask with Gunicorn or another WSGI server.
-3. Keep `instance/` in a shared persistent directory.
-4. Deploy source code as releases.
-5. Set strong admin credentials through environment variables.
-6. Configure SMTP in the admin panel.
-7. Add a scheduled queue worker for `process_email_queue()`.
-8. Back up `instance/` regularly.
+3. Deploy the application into one fixed project directory, such as `/www/wwwroot/onlypt.rosebeg.com/current`.
+4. Use Git in that fixed directory for code version control, updates, and rollbacks (`git pull`, `git reset`, or checked commits).
+5. Keep `instance/` persistent and outside normal source commits. It can be a real directory or a symlink to a shared data directory.
+6. If using a hosting panel such as BaoTa, point the panel project root directly at the fixed directory instead of a `current -> releases/...` symlink, so process status detection and start/stop actions match the real running service.
+7. Set strong admin credentials through environment variables.
+8. Configure SMTP in the admin panel.
+9. Add a scheduled queue worker for `process_email_queue()`.
+10. Back up `instance/` regularly.
+
+The project no longer requires release-directory deployment. Git remains the source-code version control system; runtime data remains in `instance/`.
 
 Do not commit:
 
 - `instance/`
 - `.env`
 - virtual environments
-- deployment archives
+- deployment archives or temporary server backups
 - uploaded user assets
 
 ## Customization Guide

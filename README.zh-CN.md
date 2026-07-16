@@ -206,19 +206,23 @@ requirements.txt      Python 依赖
 
 1. 运行在 Nginx 或其他反向代理后面。
 2. 使用 Gunicorn 或其他 WSGI 服务器运行 Flask。
-3. 将 `instance/` 保存在共享持久化目录中。
-4. 以 release 方式部署源代码。
-5. 通过环境变量设置强后台凭据。
-6. 在后台面板中配置 SMTP。
-7. 为 `process_email_queue()` 添加定时队列 worker。
-8. 定期备份 `instance/`。
+3. 将应用部署到一个固定项目目录，例如 `/www/wwwroot/onlypt.rosebeg.com/current`。
+4. 在这个固定目录里使用 Git 做代码版本控制、更新和回滚，例如 `git pull`、`git reset` 或切换到指定提交。
+5. 保持 `instance/` 持久化并且不要提交到源码仓库。它可以是实体目录，也可以软链接到共享数据目录。
+6. 如果使用宝塔这类面板，面板项目根目录应直接指向固定目录，而不是 `current -> releases/...` 软链接，这样进程状态检测和启动/停止操作才能和真实运行服务一致。
+7. 通过环境变量设置强后台凭据。
+8. 在后台面板中配置 SMTP。
+9. 为 `process_email_queue()` 添加定时队列 worker。
+10. 定期备份 `instance/`。
+
+项目不再需要 release 目录部署。Git 仍然是源码版本控制系统；运行时数据仍然保存在 `instance/` 中。
 
 不要提交：
 
 - `instance/`
 - `.env`
 - 虚拟环境
-- 部署归档文件
+- 部署归档文件或临时服务器备份
 - 用户上传资源
 
 ## 定制指南
