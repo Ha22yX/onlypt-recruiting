@@ -100,7 +100,7 @@ http://127.0.0.1:5000
 
 ## 环境变量
 
-应用在本地不配置环境变量也能运行，但生产环境应该设置安全值。
+生产环境必须设置安全值。如果缺少 `ONLYPT_ADMIN_PASSWORD`，后台登录会被禁用，而不是回退到默认密码。
 
 ```text
 SECRET_KEY=replace-with-a-long-random-secret

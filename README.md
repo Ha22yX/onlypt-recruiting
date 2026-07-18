@@ -105,7 +105,7 @@ http://127.0.0.1:5000
 
 ## Environment Variables
 
-The app works locally without environment variables, but production should set secure values.
+Production must set secure values. If `ONLYPT_ADMIN_PASSWORD` is missing, admin login is disabled instead of falling back to a default password.
 
 ```text
 SECRET_KEY=replace-with-a-long-random-secret

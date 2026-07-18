@@ -47,7 +47,7 @@ FAVICON_UPLOAD_DIR = UPLOAD_DIR / "favicons"
 STATIC_FAVICON_FILE = Path(app.root_path) / "static" / "favicon.ico"
 STATIC_FAVICON_PNG_FILE = Path(app.root_path) / "static" / "favicon-192.png"
 ADMIN_USERNAME = os.environ.get("ONLYPT_ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "REDACTED_ADMIN_PASSWORD")
+ADMIN_PASSWORD = os.environ.get("ONLYPT_ADMIN_PASSWORD", "")
 CONTACT_FORM_MIN_SECONDS = 2
 CONTACT_FORM_TOKEN_SESSION_KEY = "contact_form_token"
 CONTACT_FORM_STARTED_SESSION_KEY = "contact_form_started_at"
@@ -2802,14 +2802,16 @@ def admin_login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        if not ADMIN_PASSWORD:
+            flash("Admin password is not configured on the server.", "error")
+        elif secrets.compare_digest(username, ADMIN_USERNAME) and secrets.compare_digest(password, ADMIN_PASSWORD):
             session["admin_authenticated"] = True
             next_url = request.args.get("next", "")
             if next_url.startswith("/") and not next_url.startswith("//"):
                 return redirect(next_url)
             return redirect(url_for("admin_content", page_key="home"))
-
-        flash("Invalid admin username or password.", "error")
+        else:
+            flash("Invalid admin username or password.", "error")
 
     return render_template("admin_login.html", page="admin-login")
 
