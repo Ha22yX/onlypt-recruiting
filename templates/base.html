@@ -12,22 +12,15 @@
     <meta property="og:title" content="{{ seo.og_title }}">
     <meta property="og:description" content="{{ seo.og_description }}">
     <meta property="og:url" content="{{ seo.og_url }}">
+    <meta property="og:image" content="{{ seo.og_image }}">
+    <meta property="og:image:alt" content="Physical Therapy recruiting with onlyPT">
     <meta name="twitter:card" content="{{ seo.twitter_card }}">
     <meta name="twitter:title" content="{{ seo.og_title }}">
     <meta name="twitter:description" content="{{ seo.og_description }}">
+    <meta name="twitter:image" content="{{ seo.og_image }}">
+    <meta name="author" content="onlyPT Recruiting">
     <title>{% block title %}{{ seo.title }}{% endblock %}</title>
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "ProfessionalService",
-        "name": "onlyPT Recruiting",
-        "url": {{ seo.canonical|tojson }},
-        "description": {{ seo.description|tojson }},
-        "areaServed": "United States",
-        "serviceType": "Physical Therapy recruiting",
-        "knowsAbout": ["Physical Therapy recruiting", "Physical Therapist hiring", "Healthcare recruiting"]
-      }
-    </script>
+    <script type="application/ld+json">{{ seo.structured_data|tojson }}</script>
     <script>
       (function bootPageState() {
         var root = document.documentElement;

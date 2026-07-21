@@ -120,45 +120,46 @@ PUBLIC_TRAFFIC_ENDPOINTS = {"home", "employers", "therapists", "about", "contact
 PUBLIC_SEO_PAGES = {
     "home": {
         "endpoint": "home",
-        "title": "onlyPT Recruiting | Physical Therapy Recruiting",
-        "description": "onlyPT Recruiting helps healthcare employers hire licensed Physical Therapists through focused sourcing, clinical fluency, and candidate conversations built around real fit.",
-        "keywords": "physical therapy recruiting, PT recruiting, physical therapist recruiter, healthcare recruiting, physical therapist hiring, rehab recruiting",
+        "title": "Physical Therapy Recruiting for Employers and PTs | onlyPT",
+        "description": "onlyPT is a physical therapy recruiting partner for healthcare employers hiring licensed Physical Therapists and PT professionals exploring better-fit career opportunities.",
+        "keywords": "physical therapy recruiting, physical therapist recruiting, PT recruiting, physical therapist recruiter, healthcare recruiting, physical therapist hiring, physical therapy jobs, PT jobs, physical therapist careers, rehab recruiting",
         "priority": "1.0",
         "changefreq": "weekly",
     },
     "employers": {
         "endpoint": "employers",
-        "title": "Hire Physical Therapists | onlyPT Recruiting",
-        "description": "Hire licensed Physical Therapists with a focused PT recruiting partner built for healthcare employers, clinical settings, and local market realities.",
-        "keywords": "hire physical therapists, physical therapy staffing, PT hiring, physical therapist recruitment, healthcare employer recruiting",
+        "title": "Hire Physical Therapists | Physical Therapy Recruiting | onlyPT",
+        "description": "Healthcare employers use onlyPT for focused physical therapy recruiting, licensed Physical Therapist hiring, PT candidate sourcing, and clinical recruiting conversations.",
+        "keywords": "hire physical therapists, physical therapy recruiting, physical therapist recruitment, PT hiring, physical therapy staffing, healthcare employer recruiting, outpatient physical therapist recruiter, rehab therapy recruiting",
         "priority": "0.9",
         "changefreq": "weekly",
     },
     "therapists": {
         "endpoint": "therapists",
-        "title": "Physical Therapy Jobs | onlyPT Recruiting",
-        "description": "Explore Physical Therapist roles with a recruiting partner who understands PT settings, caseloads, mentorship, compensation, and career goals.",
-        "keywords": "physical therapy jobs, PT jobs, physical therapist careers, outpatient PT jobs, rehab therapy jobs",
+        "title": "Physical Therapy Jobs and PT Career Recruiting | onlyPT",
+        "description": "Physical Therapists work with onlyPT to explore confidential PT jobs, career moves, clinical settings, compensation goals, mentorship needs, and better-fit roles.",
+        "keywords": "physical therapy jobs, PT jobs, physical therapist jobs, physical therapist careers, PT career recruiter, outpatient PT jobs, rehab therapy jobs, physical therapy employment agency",
         "priority": "0.8",
         "changefreq": "weekly",
     },
     "about": {
         "endpoint": "about",
-        "title": "About onlyPT Recruiting",
-        "description": "Learn about onlyPT Recruiting, a focused Physical Therapy recruiting partner built around clinical understanding and disciplined search.",
-        "keywords": "about onlyPT, physical therapy recruiter, PT recruiting founder, healthcare search partner",
+        "title": "About onlyPT | Physical Therapy Recruiting Partner",
+        "description": "Learn about onlyPT, a focused physical therapy recruiting partner serving healthcare employers and Physical Therapists through clinical understanding and disciplined search.",
+        "keywords": "about onlyPT, physical therapy recruiting partner, physical therapist recruiter, PT recruiting founder, healthcare search partner, PT employment agency",
         "priority": "0.7",
         "changefreq": "monthly",
     },
     "contact": {
         "endpoint": "contact",
-        "title": "Contact onlyPT Recruiting",
-        "description": "Contact onlyPT Recruiting to discuss Physical Therapist hiring needs, PT career opportunities, or a focused recruiting search.",
-        "keywords": "contact physical therapy recruiter, PT recruiting contact, hire PT recruiter, physical therapist recruiting consultation",
+        "title": "Contact onlyPT | Physical Therapy Recruiting",
+        "description": "Contact onlyPT to discuss Physical Therapist hiring needs, confidential PT job opportunities, healthcare recruiting searches, or physical therapy career support.",
+        "keywords": "contact physical therapy recruiter, PT recruiting contact, hire PT recruiter, physical therapist recruiting consultation, PT job recruiter contact",
         "priority": "0.8",
         "changefreq": "monthly",
     },
 }
+SEO_DEFAULT_IMAGE_PATH = "/static/img/pt-recruiting-hero.png"
 INTERNAL_REFERRER_HOSTS = {
     host.strip().lower()
     for host in os.environ.get(
@@ -2485,6 +2486,9 @@ def seo_context_for(page_key: str | None = None) -> dict[str, str]:
     description = str(seo["description"])
     keywords = str(seo["keywords"])
     canonical = canonical_url_for(str(seo["endpoint"]))
+    image_url = f"{SITE_URL}{SEO_DEFAULT_IMAGE_PATH}"
+    graph_id = f"{SITE_URL}/#organization"
+    website_id = f"{SITE_URL}/#website"
     return {
         "title": title,
         "description": description,
@@ -2494,7 +2498,87 @@ def seo_context_for(page_key: str | None = None) -> dict[str, str]:
         "og_description": description,
         "og_url": canonical,
         "og_type": "website",
-        "twitter_card": "summary",
+        "og_image": image_url,
+        "twitter_card": "summary_large_image",
+        "structured_data": {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "WebSite",
+                    "@id": website_id,
+                    "name": "onlyPT",
+                    "alternateName": ["onlyPT Recruiting", "OnlyPT"],
+                    "url": SITE_URL,
+                    "publisher": {"@id": graph_id},
+                    "inLanguage": "en-US",
+                },
+                {
+                    "@type": ["Organization", "EmploymentAgency", "ProfessionalService"],
+                    "@id": graph_id,
+                    "name": "onlyPT Recruiting",
+                    "alternateName": ["onlyPT", "OnlyPT"],
+                    "url": SITE_URL,
+                    "logo": image_url,
+                    "image": image_url,
+                    "description": (
+                        "Physical therapy recruiting for healthcare employers hiring licensed "
+                        "Physical Therapists and PT professionals exploring better-fit roles."
+                    ),
+                    "areaServed": {"@type": "Country", "name": "United States"},
+                    "knowsAbout": [
+                        "Physical therapy recruiting",
+                        "Physical therapist recruiting",
+                        "PT recruiting",
+                        "Physical Therapist hiring",
+                        "Physical therapy jobs",
+                        "PT career opportunities",
+                        "Healthcare recruiting",
+                        "Outpatient physical therapy",
+                        "Rehabilitation therapy recruiting",
+                    ],
+                    "makesOffer": [
+                        {
+                            "@type": "Offer",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Physical Therapist recruiting for healthcare employers",
+                                "serviceType": "Physical therapy recruiting",
+                                "audience": {
+                                    "@type": "BusinessAudience",
+                                    "audienceType": "Healthcare employers",
+                                },
+                            },
+                        },
+                        {
+                            "@type": "Offer",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Physical Therapy career matching for PT professionals",
+                                "serviceType": "Physical therapy job search support",
+                                "audience": {
+                                    "@type": "Audience",
+                                    "audienceType": "Licensed Physical Therapists",
+                                },
+                            },
+                        },
+                    ],
+                },
+                {
+                    "@type": "WebPage",
+                    "@id": f"{canonical}#webpage",
+                    "url": canonical,
+                    "name": title,
+                    "description": description,
+                    "isPartOf": {"@id": website_id},
+                    "about": {"@id": graph_id},
+                    "primaryImageOfPage": {
+                        "@type": "ImageObject",
+                        "url": image_url,
+                    },
+                    "inLanguage": "en-US",
+                },
+            ],
+        },
     }
 
 
@@ -2684,6 +2768,7 @@ def robots_txt():
 @app.get("/sitemap.xml")
 def sitemap_xml():
     today = datetime.now(SITE_TIMEZONE).date().isoformat()
+    image_url = f"{SITE_URL}{SEO_DEFAULT_IMAGE_PATH}"
     url_entries = []
     for page in PUBLIC_SEO_PAGES.values():
         url_entries.append(
@@ -2692,12 +2777,16 @@ def sitemap_xml():
     <lastmod>{today}</lastmod>
     <changefreq>{html.escape(str(page["changefreq"]))}</changefreq>
     <priority>{html.escape(str(page["priority"]))}</priority>
+    <image:image>
+      <image:loc>{html.escape(image_url)}</image:loc>
+      <image:title>{html.escape(str(page["title"]))}</image:title>
+    </image:image>
   </url>"""
         )
     xml = "\n".join(
         [
             '<?xml version="1.0" encoding="UTF-8"?>',
-            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
             *url_entries,
             "</urlset>",
             "",
