@@ -251,4 +251,10 @@ Code changes are only needed when:
 
 ## License / Ownership
 
-This repository is source-available, not open source. Commercial use, resale, SaaS hosting, and closed-source derivatives require prior written permission from the repository owner.
+This repository is source-available, not open source.
+
+The code may be viewed, studied, forked, and privately modified for personal, educational, review, or non-commercial internal evaluation purposes.
+
+Without prior written permission from the repository owner, you may not use this project for commercial deployments, paid client work, resale, SaaS hosting, template sales, competing recruiting/staffing products, closed-source derivative works, or other monetized use.
+
+See [LICENSE](LICENSE) for the full onlyPT Source Available Non-Commercial License.

@@ -246,4 +246,10 @@ requirements.txt      Python 依赖
 
 ## 授权 / 所有权
 
-该仓库作为 onlyPT 类型服务网站的可复用网站项目维护。用于第三方商业部署前，请先与仓库所有者确认授权和复用权限。
+该仓库是 source-available 项目，不是开源项目。
+
+代码可以用于查看、学习、fork，以及个人、教育、审阅或非商业内部评估目的下的私有修改。
+
+未经仓库所有者事先书面许可，不得将本项目用于商业部署、付费客户项目、销售、转售、SaaS 托管、模板销售、竞争性招聘/人力资源产品、闭源衍生作品，或其他任何商业变现用途。
+
+完整条款请查看 [LICENSE](LICENSE) 中的 onlyPT Source Available Non-Commercial License。
